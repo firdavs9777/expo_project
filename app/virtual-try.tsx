@@ -1,7 +1,7 @@
 // app/virtual-try.tsx
 import { useAuth } from "@/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -114,34 +114,119 @@ export default function VirtualTryOn() {
 
     try {
       console.log("Converting user photo to base64...");
-      const userImageBase64 = await FileSystem.readAsStringAsync(userPhoto, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const userImageDataUri = `data:image/jpeg;base64,${userImageBase64}`;
+      console.log("User photo URI:", userPhoto);
+      
+      // Convert user image to base64 using FileSystem
+      let userImageDataUri: string;
+      try {
+        const userImageBase64 = await FileSystem.readAsStringAsync(userPhoto, {
+          encoding: 'base64' as any,
+        });
+        
+        if (!userImageBase64 || typeof userImageBase64 !== 'string' || userImageBase64.length === 0) {
+          throw new Error("User image base64 conversion returned empty or invalid result");
+        }
+        
+        // Determine image format from URI
+        const userImageFormat = userPhoto.toLowerCase().includes('.png') ? 'png' : 'jpeg';
+        userImageDataUri = `data:image/${userImageFormat};base64,${userImageBase64}`;
+        
+        console.log("User image base64 length:", userImageBase64.length);
+        console.log("User image data URI length:", userImageDataUri.length);
+        console.log("User image data URI starts with:", userImageDataUri.substring(0, 30));
+      } catch (error) {
+        console.error("Error converting user image:", error);
+        throw new Error(`Failed to convert user image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+      
+      if (!userImageDataUri || !userImageDataUri.startsWith('data:image/')) {
+        throw new Error(`Invalid user image data URI format: ${userImageDataUri ? userImageDataUri.substring(0, 50) : 'null'}`);
+      }
 
-      console.log("Downloading and converting outfit image to base64...");
-      const productImageUri = `${FileSystem.cacheDirectory}product_image.jpg`;
-      const { status, uri } = await FileSystem.downloadAsync(
-        outfitImageUrl,
-        productImageUri
-      );
-      if (status !== 200) throw new Error("Failed to download product image");
-
-      const productImageBase64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const productImageDataUri = `data:image/jpeg;base64,${productImageBase64}`;
+      console.log("Converting outfit image to base64...");
+      console.log("Outfit image URL:", outfitImageUrl);
+      
+      // Download and convert product image to base64
+      let productImageDataUri: string;
+      try {
+        // Download the image first
+        const productImageUri = `${FileSystem.cacheDirectory}product_image_${Date.now()}.jpg`;
+        const downloadResult = await FileSystem.downloadAsync(
+          outfitImageUrl,
+          productImageUri
+        );
+        
+        if (downloadResult.status !== 200) {
+          throw new Error(`Failed to download product image: HTTP ${downloadResult.status}`);
+        }
+        
+        // Read as base64
+        const productImageBase64 = await FileSystem.readAsStringAsync(downloadResult.uri, {
+          encoding: 'base64' as any,
+        });
+        
+        if (!productImageBase64 || typeof productImageBase64 !== 'string' || productImageBase64.length === 0) {
+          throw new Error("Product image base64 conversion returned empty or invalid result");
+        }
+        
+        // Determine image format from URL
+        const productImageFormat = outfitImageUrl.toLowerCase().includes('.png') ? 'png' : 'jpeg';
+        productImageDataUri = `data:image/${productImageFormat};base64,${productImageBase64}`;
+        
+        console.log("Product image base64 length:", productImageBase64.length);
+        console.log("Product image data URI length:", productImageDataUri.length);
+        console.log("Product image data URI starts with:", productImageDataUri.substring(0, 30));
+      } catch (error) {
+        console.error("Error converting product image:", error);
+        throw new Error(`Failed to convert product image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+      
+      if (!productImageDataUri || !productImageDataUri.startsWith('data:image/')) {
+        throw new Error(`Invalid product image data URI format: ${productImageDataUri ? productImageDataUri.substring(0, 50) : 'null'}`);
+      }
 
       console.log("Sending request to try-on API...");
+      
+      // Validate both images are ready
+      if (!userImageDataUri || userImageDataUri === 'null' || !userImageDataUri.startsWith('data:image/')) {
+        throw new Error(`Invalid user_image: ${userImageDataUri ? 'format incorrect' : 'is null/undefined'}`);
+      }
+      
+      if (!productImageDataUri || productImageDataUri === 'null' || !productImageDataUri.startsWith('data:image/')) {
+        throw new Error(`Invalid product_image: ${productImageDataUri ? 'format incorrect' : 'is null/undefined'}`);
+      }
+      
+      const requestBody = {
+        user_image: userImageDataUri,
+        product_image: productImageDataUri,
+      };
+      
+      console.log("Request body validation passed");
+      console.log("User image present:", !!requestBody.user_image);
+      console.log("Product image present:", !!requestBody.product_image);
+      console.log("User image type:", typeof requestBody.user_image);
+      console.log("Product image type:", typeof requestBody.product_image);
+      
+      const requestBodyString = JSON.stringify(requestBody);
+      console.log("Request body string length:", requestBodyString.length);
+      console.log("Request body preview:", requestBodyString.substring(0, 200));
+      
+      // Verify JSON stringification worked
+      const parsed = JSON.parse(requestBodyString);
+      if (!parsed.user_image || !parsed.product_image) {
+        throw new Error("JSON stringification failed - fields are missing");
+      }
+      console.log("JSON stringification verified");
+      
       const response = await fetch(
-        "https://stylist-ai-be.onrender.com/api/test/try-on/generate",
+        "https://stylist-ai-be.onrender.com/api/try-on/generate",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_image: userImageDataUri,
-            product_image: productImageDataUri,
-          }),
+          headers: { 
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: requestBodyString,
         }
       );
 
@@ -153,7 +238,11 @@ export default function VirtualTryOn() {
 
       const contentType = response.headers.get("content-type");
 
-      const processResult = (base64: string) => {
+      const processResult = (base64: string | null | undefined) => {
+        if (!base64 || typeof base64 !== 'string') {
+          throw new Error("Invalid result image data received from API");
+        }
+        
         const base64WithPrefix = base64.startsWith("data:")
           ? base64
           : `data:image/png;base64,${base64}`;
@@ -174,13 +263,47 @@ export default function VirtualTryOn() {
 
       if (contentType?.includes("application/json")) {
         const data = await response.json();
-        const resultImage = data.image || data.result_image || data.result;
+        
+        // Log full API response
+        console.log("=== API Response ===");
+        console.log("Response status:", response.status);
+        console.log("Content-Type:", contentType);
+        console.log("Response keys:", Object.keys(data));
+        console.log("Full response:", JSON.stringify(data, null, 2));
+        console.log("Response preview (first 500 chars):", JSON.stringify(data).substring(0, 500));
+        
+        // Try multiple possible field names for the result image
+        const resultImage = data.try_on_image || data.image || data.result_image || data.result || data.data;
+        
+        console.log("Checking for image field...");
+        console.log("try_on_image:", data.try_on_image ? `Found (length: ${data.try_on_image.length})` : "Not found");
+        console.log("image:", data.image ? `Found (length: ${data.image.length})` : "Not found");
+        console.log("result_image:", data.result_image ? `Found (length: ${data.result_image.length})` : "Not found");
+        console.log("result:", data.result ? `Found (length: ${data.result.length})` : "Not found");
+        console.log("data:", data.data ? `Found (length: ${data.data.length})` : "Not found");
+        
+        if (!resultImage) {
+          console.error("No image field found in response. Available keys:", Object.keys(data));
+          console.error("Response structure:", data);
+          throw new Error("API response does not contain image data. Available fields: " + Object.keys(data).join(", "));
+        }
+        
+        console.log("Result image found, type:", typeof resultImage);
+        console.log("Result image length:", typeof resultImage === 'string' ? resultImage.length : 'N/A');
+        console.log("Result image preview (first 100 chars):", typeof resultImage === 'string' ? resultImage.substring(0, 100) : 'N/A');
         processResult(resultImage);
       } else {
         const blob = await response.blob();
         const reader = new FileReader();
         reader.onloadend = () => {
-          processResult(reader.result as string);
+          const result = reader.result;
+          if (!result || typeof result !== 'string') {
+            throw new Error("Failed to convert blob to data URL");
+          }
+          processResult(result);
+        };
+        reader.onerror = () => {
+          throw new Error("Error reading blob data");
         };
         reader.readAsDataURL(blob);
       }

@@ -1,6 +1,6 @@
-import { saveLikedItem } from "@/utils/likedItemsStorage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   ActivityIndicator,
   Animated,
@@ -39,12 +39,14 @@ interface OutfitItem {
 const CATEGORY_MAP = {
   Top: ["t-shirts", "shirt", "polos", "outwear"],
   Bottom: ["trousers", "jeans", "shorts"],
-  Shoes: ["shoes and bag", "sneakers", "boots"],
+  Shoes: ["shoes", "sneakers", "boots"],
 };
 
 export default function OutfitSwipeDeck() {
   const params = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
+
   // Get color type from params or use default
   const personalColorType =
     (params.personalColorType as string) || "Deep Autumn";
@@ -262,28 +264,37 @@ export default function OutfitSwipeDeck() {
     if (direction === "right" && item) {
       setLikedItems([...likedItems, item.ID]);
 
-      // Save liked item to AsyncStorage for wardrobe
-      try {
-        await saveLikedItem(item, selectedCategory);
-      } catch (error) {
-        console.error("Error saving liked item to storage:", error);
-      }
+      // Save like to backend using authenticated endpoint
+      if (user?.access_token) {
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/api/user/outfits/like`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                Authorization: `Bearer ${user.access_token}`,
+              },
+              body: JSON.stringify({
+                item_id: item.ID.toString(),
+              }),
+            }
+          );
 
-      // Optional: Save like to backend
-      try {
-        await fetch(`${API_BASE_URL}/api/likes`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            itemId: item.ID,
-            personalColorType: personalColorType,
-            category: selectedCategory,
-          }),
-        });
-      } catch (error) {
-        console.error("Error saving like to backend:", error);
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(
+              errorData.detail || `Failed to like outfit: ${response.status}`
+            );
+          }
+
+          const likedOutfit = await response.json();
+          console.log("Outfit liked successfully:", likedOutfit);
+        } catch (error) {
+          console.error("Error saving like to backend:", error);
+          // Don't throw - allow the like to still work locally
+        }
       }
     }
 
@@ -463,7 +474,6 @@ export default function OutfitSwipeDeck() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>{personalColorType}</Text>
-          <Text style={styles.headerSubtitle}>For You</Text>
         </View>
       </View>
 
@@ -554,16 +564,6 @@ export default function OutfitSwipeDeck() {
             <Text style={styles.itemBrand}>{currentItem.ColorName}</Text>
           </View>
 
-          {/* Virtual Try-On Badge */}
-          <TouchableOpacity
-            style={styles.tryOnBadge}
-            onPress={() => {
-              // Open product URL or virtual try-on
-              console.log("Virtual Try-On:", currentItem.ProductURL);
-            }}
-          >
-            <Text style={styles.tryOnText}>👁️ Virtual Try-On</Text>
-          </TouchableOpacity>
         </Animated.View>
       </View>
 

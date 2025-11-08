@@ -12,37 +12,120 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  getLikedItemsByCategory,
-  removeLikedItem,
-  type LikedItem,
-} from "@/utils/likedItemsStorage";
+import { useAuth } from "@/contexts/AuthContext";
+import { type LikedItem } from "@/utils/likedItemsStorage";
 
 const API_BASE_URL = "https://stylist-ai-be.onrender.com";
 
 export default function WardrobeScreen() {
+  const { user } = useAuth();
   const [topItems, setTopItems] = useState<LikedItem[]>([]);
   const [bottomItems, setBottomItems] = useState<LikedItem[]>([]);
   const [shoesItems, setShoesItems] = useState<LikedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedTop, setSelectedTop] = useState<LikedItem | null>(null);
   const [selectedBottom, setSelectedBottom] = useState<LikedItem | null>(null);
   const [selectedShoes, setSelectedShoes] = useState<LikedItem | null>(null);
   const [sendingTryOn, setSendingTryOn] = useState(false);
 
+  // Helper function to determine category from item type
+  const getCategoryFromType = (type: string): "Top" | "Bottom" | "Shoes" => {
+    const typeLower = type.toLowerCase();
+    if (
+      typeLower.includes("shirt") ||
+      typeLower.includes("t-shirt") ||
+      typeLower.includes("top") ||
+      typeLower.includes("polo") ||
+      typeLower.includes("outwear")
+    ) {
+      return "Top";
+    } else if (
+      typeLower.includes("trouser") ||
+      typeLower.includes("jean") ||
+      typeLower.includes("short") ||
+      typeLower.includes("bottom")
+    ) {
+      return "Bottom";
+    } else if (
+      typeLower.includes("shoe") ||
+      typeLower.includes("sneaker") ||
+      typeLower.includes("boot")
+    ) {
+      return "Shoes";
+    }
+    // Default to Top if can't determine
+    return "Top";
+  };
+
   const loadLikedItems = async () => {
+    if (!user?.access_token) {
+      setError("Not authenticated");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const [tops, bottoms, shoes] = await Promise.all([
-        getLikedItemsByCategory("Top"),
-        getLikedItemsByCategory("Bottom"),
-        getLikedItemsByCategory("Shoes"),
-      ]);
+      setError(null);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/user/outfits/liked`,
+        {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+            Authorization: `Bearer ${user.access_token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Map API response to LikedItem format
+      // The API might return items with different field names, so we normalize them
+      const mappedItems: LikedItem[] = data.map((item: any) => {
+        // Get item_id from API response (this is the string ID used in the API)
+        const itemId = item.item_id || item.ID?.toString() || item.id?.toString() || "";
+        
+        // Normalize field names - handle both possible API response formats
+        const normalizedItem: LikedItem = {
+          ID: item.ID || item.id || parseInt(item.item_id) || 0,
+          Description: item.Description || item.description || "",
+          Price: item.Price || item.price || "",
+          imageUrl: item.imageUrl || item.ImageURL || item.image_url || "",
+          ColorHEX: item.ColorHEX || item.colorHEX || item.color_hex || "",
+          ProductURL: item.ProductURL || item.productURL || item.product_url || "",
+          ColorName: item.ColorName || item.colorName || item.color_name || "",
+          DetailDescription: item.DetailDescription || item.detailDescription || item.detail_description || "",
+          Type: item.Type || item.type || "",
+          PersonalColorType: item.PersonalColorType || item.personalColorType || item.personal_color_type || "",
+          popularity: item.popularity || 0,
+          category: item.category || getCategoryFromType(item.Type || item.type || ""),
+          likedAt: item.created_at || item.likedAt || new Date().toISOString(),
+          // Store item_id for API calls
+          item_id: itemId,
+        } as LikedItem & { item_id: string };
+        return normalizedItem;
+      });
+
+      // Group items by category
+      const tops = mappedItems.filter((item) => item.category === "Top");
+      const bottoms = mappedItems.filter((item) => item.category === "Bottom");
+      const shoes = mappedItems.filter((item) => item.category === "Shoes");
+
       setTopItems(tops);
       setBottomItems(bottoms);
       setShoesItems(shoes);
-    } catch (error) {
-      console.error("Error loading liked items:", error);
+    } catch (err) {
+      console.error("Error loading liked items:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to load liked items"
+      );
     } finally {
       setLoading(false);
     }
@@ -50,21 +133,50 @@ export default function WardrobeScreen() {
 
   useEffect(() => {
     loadLikedItems();
-  }, []);
+  }, [user?.access_token]);
 
   // Refresh items when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadLikedItems();
-    }, [])
+    }, [user?.access_token])
   );
 
   const handleRemoveItem = async (item: LikedItem) => {
+    if (!user?.access_token) {
+      console.error("Not authenticated");
+      return;
+    }
+
     try {
-      await removeLikedItem(item.ID, item.category);
-      await loadLikedItems(); // Reload items
+      // Get item_id from item (stored from API response) or fallback to ID
+      const itemId = (item as any).item_id || item.ID?.toString() || item.ID;
+      
+      console.log("Removing item with item_id:", itemId, "Full item:", item);
+      
+      // Call API to unlike the item using DELETE method with item_id in URL
+      const response = await fetch(
+        `${API_BASE_URL}/api/user/outfits/like/${itemId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${user.access_token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(`Failed to remove item: ${response.status} - ${errorText}`);
+      }
+
+      // Reload items after removal
+      await loadLikedItems();
     } catch (error) {
       console.error("Error removing item:", error);
+      // Still reload to sync state
+      await loadLikedItems();
     }
   };
 
@@ -187,6 +299,17 @@ export default function WardrobeScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B35" />
+        </View>
+      ) : error ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Error loading items</Text>
+          <Text style={styles.emptySubtext}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={loadLikedItems}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : !hasAnyItems ? (
         <View style={styles.emptyContainer}>
@@ -431,5 +554,17 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     opacity: 0.9,
+  },
+  retryButton: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

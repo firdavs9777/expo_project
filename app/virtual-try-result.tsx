@@ -1,6 +1,8 @@
 // app/virtual-result.tsx
 import { useAuth } from "@/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system/legacy";
+import * as MediaLibrary from "expo-media-library";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -30,42 +32,45 @@ export default function VirtualResult() {
   const outfitColor = params.outfitColor as string;
   const outfitId = params.outfitId as string;
 
-  //   const saveToGallery = async () => {
-  //     try {
-  //       // Request permissions
-  //       const { status } = await MediaLibrary.requestPermissionsAsync();
-  //       if (status !== "granted") {
-  //         Alert.alert(
-  //           "Permission Required",
-  //           "Please grant permission to save photos to your gallery."
-  //         );
-  //         return;
-  //       }
+  const saveToGallery = async () => {
+    try {
+      // Request permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please grant permission to save photos to your gallery."
+        );
+        return;
+      }
 
-  //       setIsSaving(true);
+      setIsSaving(true);
 
-  //       // Convert base64 to file
-  //       const filename = `tryon_${Date.now()}.png`;
-  //       const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+      // Convert base64 to file
+      const filename = `tryon_${Date.now()}.png`;
+      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
 
-  //       // Remove data URI prefix if present
-  //       const base64Data = resultImageUri.replace(/^data:image\/\w+;base64,/, "");
+      // Remove data URI prefix if present
+      const base64Data = resultImageUri.replace(/^data:image\/\w+;base64,/, "");
 
-  //       await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-  //         encoding: FileSystem.EncodingType.Base64,
-  //       });
+      await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+        encoding: 'base64' as any,
+      });
 
-  //       // Save to gallery
-  //       await MediaLibrary.saveToLibraryAsync(fileUri);
+      // Save to gallery
+      await MediaLibrary.createAssetAsync(fileUri);
 
-  //       Alert.alert("Success!", "Image saved to your gallery.");
-  //     } catch (error) {
-  //       console.error("Error saving to gallery:", error);
-  //       Alert.alert("Error", "Failed to save image to gallery.");
-  //     } finally {
-  //       setIsSaving(false);
-  //     }
-  //   };
+      Alert.alert("Success!", "Image saved to your gallery.");
+    } catch (error) {
+      console.error("Error saving to gallery:", error);
+      Alert.alert(
+        "Error",
+        `Failed to save image to gallery: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Share image
   //   const shareImage = async () => {
@@ -201,7 +206,7 @@ export default function VirtualResult() {
 
           <TouchableOpacity
             style={[styles.actionButton, styles.secondaryButton]}
-            // onPress={saveToGallery}
+            onPress={saveToGallery}
             disabled={isSaving}
           >
             <Ionicons name="download" size={24} color="#FF6B35" />
