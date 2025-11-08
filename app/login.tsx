@@ -1,6 +1,9 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,15 +17,41 @@ import {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    // Add your login logic here
-    console.log("Login with:", email, password);
-    // Navigate to welcome screen or main app
-    router.push("/welcome");
+  const handleLogin = async () => {
+    // Validation
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter both email and password");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await login(email, password);
+
+      // Success! Navigate to main app
+      Alert.alert("Success", "Logged in successfully!", [
+        {
+          text: "OK",
+          onPress: () => router.replace("/(tabs)/profile"),
+        },
+      ]);
+    } catch (error: any) {
+      console.error("Login error:", error);
+      Alert.alert(
+        "Login Failed",
+        error.message || "Invalid email or password. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -38,13 +67,13 @@ export default function LoginScreen() {
       >
         <View style={styles.iconContainer}>
           <View style={styles.iconCircle}>
-            <Text style={styles.iconEmoji}>🎨</Text>
+            <Text style={styles.iconEmoji}>🍌</Text>
           </View>
         </View>
 
         {/* Title */}
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>Find Your Perfect Colors</Text>
+          <Text style={styles.title}>Welcome Back!</Text>
           <Text style={styles.subtitle}>
             Sign in to discover your personal style.
           </Text>
@@ -55,12 +84,13 @@ export default function LoginScreen() {
           <Text style={styles.inputLabel}>Email</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter your email address"
+            placeholder="Enter your email"
             placeholderTextColor="#666"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!loading}
           />
         </View>
 
@@ -75,10 +105,12 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
+              editable={!loading}
             />
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
               style={styles.eyeIcon}
+              disabled={loading}
             >
               <Text style={styles.eyeIconText}>
                 {showPassword ? "👁️" : "👁️‍🗨️"}
@@ -87,19 +119,36 @@ export default function LoginScreen() {
           </View>
         </View>
 
+        {/* Forgot Password */}
+        <TouchableOpacity
+          style={styles.forgotPassword}
+          onPress={() => console.log("Forgot password")}
+          disabled={loading}
+        >
+          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        </TouchableOpacity>
+
         {/* Sign In Button */}
         <TouchableOpacity
-          style={styles.signInButton}
+          style={[styles.signInButton, loading && styles.signInButtonDisabled]}
           onPress={handleLogin}
           activeOpacity={0.8}
+          disabled={loading}
         >
-          <Text style={styles.signInButtonText}>Sign In with Email</Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.signInButtonText}>Sign In</Text>
+          )}
         </TouchableOpacity>
 
         {/* Sign Up Link */}
         <View style={styles.signUpContainer}>
           <Text style={styles.signUpText}>Dont have an account? </Text>
-          <TouchableOpacity onPress={() => router.push("/signup")}>
+          <TouchableOpacity
+            onPress={() => router.push("/signup")}
+            disabled={loading}
+          >
             <Text style={styles.signUpLink}>Sign Up</Text>
           </TouchableOpacity>
         </View>
@@ -112,15 +161,27 @@ export default function LoginScreen() {
         </View>
 
         {/* Social Login Buttons */}
-        <TouchableOpacity style={styles.kakaoButton} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.kakaoButton}
+          activeOpacity={0.8}
+          disabled={loading}
+        >
           <Text style={styles.kakaoButtonText}>💬 Continue with Kakao</Text>
         </TouchableOpacity>
 
         <View style={styles.socialButtonsRow}>
-          <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-            <Text style={styles.socialButtonText}>Google</Text>
+          <TouchableOpacity
+            style={styles.socialButton}
+            activeOpacity={0.8}
+            disabled={loading}
+          >
+            <Text style={styles.socialButtonText}>🔍 Google</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.socialButton}
+            activeOpacity={0.8}
+            disabled={loading}
+          >
             <Text style={styles.socialButtonText}>🍎 Apple</Text>
           </TouchableOpacity>
         </View>
@@ -133,6 +194,15 @@ export default function LoginScreen() {
             <Text style={styles.termsLink}>Privacy Policy</Text>
           </Text>
         </View>
+
+        {/* Guest Mode */}
+        <TouchableOpacity
+          style={styles.guestButton}
+          onPress={() => router.replace("/(tabs)/profile")}
+          disabled={loading}
+        >
+          <Text style={styles.guestButtonText}>Continue as Guest</Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -152,15 +222,15 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   iconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: "#FF6B35",
     justifyContent: "center",
     alignItems: "center",
   },
   iconEmoji: {
-    fontSize: 35,
+    fontSize: 40,
   },
   titleContainer: {
     alignItems: "center",
@@ -168,7 +238,7 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
     color: "#fff",
     marginBottom: 8,
@@ -217,12 +287,24 @@ const styles = StyleSheet.create({
   eyeIconText: {
     fontSize: 18,
   },
+  forgotPassword: {
+    alignSelf: "flex-end",
+    marginBottom: 20,
+  },
+  forgotPasswordText: {
+    color: "#FF6B35",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   signInButton: {
     backgroundColor: "#FF6B35",
     borderRadius: 25,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 10,
+  },
+  signInButtonDisabled: {
+    opacity: 0.6,
   },
   signInButtonText: {
     color: "#fff",
@@ -301,5 +383,15 @@ const styles = StyleSheet.create({
   termsLink: {
     color: "#FF6B35",
     textDecorationLine: "underline",
+  },
+  guestButton: {
+    marginTop: 20,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  guestButtonText: {
+    color: "#999",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

@@ -19,7 +19,7 @@ export default function LanguageSelectScreen() {
     setSelectedLanguage(language);
     // Navigate to login after short delay
     setTimeout(() => {
-      router.push("/login");
+      router.push("/(tabs)/profile");
     }, 300);
   };
 

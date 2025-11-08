@@ -103,7 +103,7 @@ export default function AnalysisResultsScreen() {
 
   const handleSaveResults = () => {
     // Save to profile and navigate to main app
-    router.replace("/(tabs)");
+    router.replace("/login");
   };
 
   const handleRetakeAnalysis = () => {

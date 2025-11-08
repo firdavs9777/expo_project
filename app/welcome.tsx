@@ -17,7 +17,7 @@ export default function WelcomeTermsScreen() {
   const handleContinue = () => {
     if (agreedToTerms) {
       // Navigate to main app
-      router.replace("/(tabs)"); // Replace with your main app route
+      router.replace("/(tabs)/outfit-swipe"); // Replace with your main app route
     }
   };
 
