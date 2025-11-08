@@ -2,6 +2,14 @@
 
 A React Native app built with Expo that helps users discover their personal color season, try on outfits virtually, and manage their wardrobe.
 
+## Screenshots
+
+### Before
+![Before](./before.PNG)
+
+### After
+![After](./after.PNG)
+
 ## Features
 
 - 🎨 **Personal Color Analysis** - AI-powered color season detection from photos
@@ -89,6 +97,117 @@ The app connects to a backend API. The base URL is configured in individual scre
 
 ```typescript
 const API_BASE_URL = "https://stylist-ai-be.onrender.com";
+```
+
+## API Endpoints
+
+### Authentication
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `POST` | `/api/auth/register` | Register a new user | No |
+| `POST` | `/api/auth/login` | Login user | No |
+
+**Request Body (Register/Login):**
+```json
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+
+### Color Analysis
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `POST` | `/api/analyze/color/ensemble/hybrid?judge_model=openai` | Analyze color season using hybrid ensemble (2 models + 1 judge) | No |
+| `POST` | `/api/analyze/color` | Analyze color season (single model - Gemini) | No |
+
+**Request Body:**
+```json
+{
+  "image": "data:image/png;base64,iVBORw0KGgo..." 
+}
+```
+
+**Query Parameters (Hybrid):**
+- `judge_model`: `"gemini"`, `"openai"`, or `"claude"` (default: `"openai"`)
+
+### User Profile & Color Results
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `GET` | `/api/user/profile` | Get user profile information | Yes |
+| `GET` | `/api/user/color/results?limit=1` | Get user's color analysis results | Yes |
+| `POST` | `/api/user/color/save` | Save color analysis result to user profile | Yes |
+
+**Request Body (Save Color Result):**
+```json
+{
+  "personal_color_type": "string",
+  "confidence": 0.95,
+  "undertone": "warm",
+  "season": "autumn",
+  "subtype": "deep autumn",
+  "reasoning": "Analysis reasoning..."
+}
+```
+
+**Query Parameters (Get Results):**
+- `limit`: Number of results to return (optional, default: all)
+
+### Outfits & Wardrobe
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `GET` | `/api/outfit/season/{season}` | Get outfits by color season | No |
+| `GET` | `/api/user/outfits/liked` | Get user's liked outfits | Yes |
+| `POST` | `/api/user/outfits/like` | Like an outfit | Yes |
+| `DELETE` | `/api/user/outfits/like/{item_id}` | Unlike an outfit | Yes |
+
+**Request Body (Like Outfit):**
+```json
+{
+  "item_id": "string"
+}
+```
+
+### Virtual Try-On
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `POST` | `/api/try-on/generate-full-outfit/on-sequential` | Generate full outfit try-on (sequential processing) | No |
+| `POST` | `/api/try-on/generate` | Generate single item try-on | No |
+
+**Request Body (Full Outfit):**
+```json
+{
+  "user_image": "data:image/png;base64,...",
+  "upper_image": "data:image/png;base64,...",
+  "lower_image": "data:image/png;base64,...",
+  "shoes_image": "data:image/png;base64,..."
+}
+```
+
+**Response (Full Outfit):**
+```json
+{
+  "try_on_full_outfit_on_sequential_image": "data:image/png;base64,...",
+  "status": "success",
+  "message": "Outfit try-on on sequential image generated successfully"
+}
+```
+
+### Authentication Headers
+
+For authenticated endpoints, include the Bearer token:
+
+```typescript
+headers: {
+  "Authorization": `Bearer ${access_token}`,
+  "Content-Type": "application/json",
+  "Accept": "application/json"
+}
 ```
 
 ## Key Technologies
