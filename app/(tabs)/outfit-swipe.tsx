@@ -13,9 +13,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { saveLikedItem } from "@/utils/likedItemsStorage";
 
 const { width, height } = Dimensions.get("window");
 const SWIPE_THRESHOLD = width * 0.25;
+const ITEMS_PER_PAGE = 10;
 
 const API_BASE_URL = "https://stylist-ai-be.onrender.com";
 
@@ -23,7 +25,7 @@ interface OutfitItem {
   ID: number;
   Description: string;
   Price: string;
-  ImageURL: string;
+  imageUrl: string;
   ColorHEX: string;
   ProductURL: string;
   ColorName: string;
@@ -36,8 +38,8 @@ interface OutfitItem {
 // Map UI categories to API categories (one at a time)
 const CATEGORY_MAP = {
   Top: ["t-shirts", "shirt", "polos", "outwear"],
-  Bottom: ["pants", "jeans", "shorts"],
-  Shoes: ["shoes", "sneakers", "boots"],
+  Bottom: ["trousers", "jeans", "shorts"],
+  Shoes: ["shoes and bag", "sneakers", "boots"],
 };
 
 export default function OutfitSwipeDeck() {
@@ -53,9 +55,16 @@ export default function OutfitSwipeDeck() {
     "Top" | "Bottom" | "Shoes"
   >("Top");
   const [currentSubCategoryIndex, setCurrentSubCategoryIndex] = useState(0);
+  const [allFetchedItems, setAllFetchedItems] = useState<OutfitItem[]>([]);
   const [outfitItems, setOutfitItems] = useState<OutfitItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasMoreItems, setHasMoreItems] = useState(true);
+  
+  // Prevent concurrent requests
+  const isFetchingRef = useRef(false);
+  const waitingForItemsRef = useRef(false);
+  const retryCountRef = useRef(0);
 
   const position = useRef(new Animated.ValueXY()).current;
   const rotate = position.x.interpolate({
@@ -76,12 +85,19 @@ export default function OutfitSwipeDeck() {
     extrapolate: "clamp",
   });
 
-  // Fetch items from backend - one subcategory at a time
+  // Fetch items from backend - fetch all items for subcategory, paginate client-side
   const fetchOutfitItems = async (
     category: "Top" | "Bottom" | "Shoes",
-    subCategoryIndex: number = 0
+    subCategoryIndex: number = 0,
+    retry: boolean = false
   ) => {
+    // Prevent concurrent requests
+    if (isFetchingRef.current && !retry) {
+      return;
+    }
+
     try {
+      isFetchingRef.current = true;
       setLoading(true);
       setError(null);
 
@@ -89,53 +105,110 @@ export default function OutfitSwipeDeck() {
       const apiCategory = apiCategories[subCategoryIndex];
 
       if (!apiCategory) {
-        // No more subcategories, reset to first
-        setCurrentSubCategoryIndex(0);
-        fetchOutfitItems(category, 0);
+        // No more subcategories for this category
+        setHasMoreItems(false);
+        setLoading(false);
+        isFetchingRef.current = false;
         return;
       }
 
+      // Fetch all items for this subcategory (API doesn't support pagination)
+      // URL encode both personalColorType and apiCategory to handle spaces
       const url = `${API_BASE_URL}/api/outfit/season/${encodeURIComponent(
         personalColorType
-      )}/category/${apiCategory}`;
+      )}/category/${encodeURIComponent(apiCategory)}`;
 
       console.log("Fetching from:", url);
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!response.ok) {
+        // Retry logic for 502 errors (Bad Gateway - often transient)
+        if (response.status === 502 && retryCountRef.current < 2) {
+          retryCountRef.current += 1;
+          console.log(`Retrying fetch (attempt ${retryCountRef.current})...`);
+          isFetchingRef.current = false;
+          // Wait 1 second before retry
+          setTimeout(() => {
+            fetchOutfitItems(category, subCategoryIndex, true);
+          }, 1000);
+          return;
+        }
         throw new Error(`Failed to fetch: ${response.status}`);
       }
 
-      const data = await response.json();
+      // Reset retry count on success
+      retryCountRef.current = 0;
+
+      let data = await response.json();
+      
+      // Ensure data is an array
+      if (!Array.isArray(data)) {
+        console.error("API returned non-array data:", data);
+        throw new Error("Invalid response format from API");
+      }
+      
+      // Normalize property names (handle both ImageURL and imageUrl)
+      data = data.map((item: any) => ({
+        ...item,
+        imageUrl: item.imageUrl || item.ImageURL || item.imageURL || "",
+      }));
+      
       console.log(
         `Fetched ${data.length} items for ${category} (${apiCategory})`
       );
 
       if (data.length === 0) {
         // This subcategory has no items, try next one
-        console.log(`No items for ${apiCategory}, trying next subcategory...`);
-        setCurrentSubCategoryIndex(subCategoryIndex + 1);
-        fetchOutfitItems(category, subCategoryIndex + 1);
-        return;
+        const nextSubCategoryIndex = subCategoryIndex + 1;
+        if (nextSubCategoryIndex < apiCategories.length) {
+          setCurrentSubCategoryIndex(nextSubCategoryIndex);
+          isFetchingRef.current = false;
+          fetchOutfitItems(category, nextSubCategoryIndex, false);
+          return;
+        } else {
+          // No more subcategories
+          setHasMoreItems(false);
+          setOutfitItems([]);
+          setAllFetchedItems([]);
+        }
+      } else {
+        // Store all fetched items and show first batch
+        setAllFetchedItems(data);
+        const firstBatch = data.slice(0, ITEMS_PER_PAGE);
+        setOutfitItems(firstBatch);
+        setCurrentIndex(0);
+        setCurrentSubCategoryIndex(subCategoryIndex);
+        setHasMoreItems(data.length > ITEMS_PER_PAGE);
       }
-
-      setOutfitItems(data);
-      setCurrentIndex(0); // Reset to first item
-      setCurrentSubCategoryIndex(subCategoryIndex);
     } catch (err) {
       console.error("Error fetching outfit items:", err);
       setError("Failed to load items. Please try again.");
       setOutfitItems([]);
+      setAllFetchedItems([]);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
   // Fetch items when component mounts or category changes
   useEffect(() => {
-    setCurrentSubCategoryIndex(0); // Reset to first subcategory
-    fetchOutfitItems(selectedCategory, 0);
+    // Reset all state when category changes
+    setCurrentSubCategoryIndex(0);
+    setCurrentIndex(0);
+    setHasMoreItems(true);
+    setOutfitItems([]);
+    setAllFetchedItems([]);
+    waitingForItemsRef.current = false;
+    retryCountRef.current = 0;
+    // Fetch all items for first subcategory
+    fetchOutfitItems(selectedCategory, 0, false);
   }, [selectedCategory]);
 
   const panResponder = useRef(
@@ -165,11 +238,36 @@ export default function OutfitSwipeDeck() {
     }).start(() => onSwipeComplete(direction));
   };
 
+  // Load next batch from allFetchedItems when needed
+  const loadNextBatch = () => {
+    const currentBatchStart = outfitItems.length;
+    const nextBatch = allFetchedItems.slice(
+      currentBatchStart,
+      currentBatchStart + ITEMS_PER_PAGE
+    );
+
+    if (nextBatch.length > 0) {
+      setOutfitItems((prev) => [...prev, ...nextBatch]);
+      const remainingItems =
+        allFetchedItems.length - (currentBatchStart + nextBatch.length);
+      setHasMoreItems(remainingItems > 0);
+      return true;
+    }
+    return false;
+  };
+
   const onSwipeComplete = async (direction: "left" | "right") => {
     const item = outfitItems[currentIndex];
 
     if (direction === "right" && item) {
       setLikedItems([...likedItems, item.ID]);
+
+      // Save liked item to AsyncStorage for wardrobe
+      try {
+        await saveLikedItem(item, selectedCategory);
+      } catch (error) {
+        console.error("Error saving liked item to storage:", error);
+      }
 
       // Optional: Save like to backend
       try {
@@ -185,22 +283,56 @@ export default function OutfitSwipeDeck() {
           }),
         });
       } catch (error) {
-        console.error("Error saving like:", error);
+        console.error("Error saving like to backend:", error);
       }
     }
 
-    // Check if we've reached the end of current subcategory
-    if (currentIndex + 1 >= outfitItems.length) {
-      // Load next subcategory
-      console.log("Finished this subcategory, loading next...");
-      const nextSubCategoryIndex = currentSubCategoryIndex + 1;
-      fetchOutfitItems(selectedCategory, nextSubCategoryIndex);
+    const nextIndex = currentIndex + 1;
+
+    // Preload next batch when 3 items remaining
+    if (
+      nextIndex >= outfitItems.length - 3 &&
+      hasMoreItems &&
+      allFetchedItems.length > outfitItems.length
+    ) {
+      loadNextBatch();
+    }
+
+    // Check if we've reached the end of current items
+    if (nextIndex >= outfitItems.length) {
+      // Try to load next batch from cached items
+      if (allFetchedItems.length > outfitItems.length) {
+        const loaded = loadNextBatch();
+        if (loaded) {
+          // New batch loaded, advance to next index
+          position.setValue({ x: 0, y: 0 });
+          setCurrentIndex(nextIndex);
+          return;
+        }
+      }
+
+      // No more items in current subcategory, try next one
+      if (hasMoreItems) {
+        const apiCategories = CATEGORY_MAP[selectedCategory];
+        const nextSubCategoryIndex = currentSubCategoryIndex + 1;
+        if (nextSubCategoryIndex < apiCategories.length) {
+          // Load next subcategory
+          setCurrentSubCategoryIndex(nextSubCategoryIndex);
+          fetchOutfitItems(selectedCategory, nextSubCategoryIndex, false);
+          position.setValue({ x: 0, y: 0 });
+          return;
+        }
+      }
+
+      // No more items available
+      waitingForItemsRef.current = false;
       position.setValue({ x: 0, y: 0 });
       return;
     }
 
+    waitingForItemsRef.current = false;
     position.setValue({ x: 0, y: 0 });
-    setCurrentIndex(currentIndex + 1);
+    setCurrentIndex(nextIndex);
   };
 
   const resetPosition = () => {
@@ -219,8 +351,9 @@ export default function OutfitSwipeDeck() {
   };
 
   const handleCategoryChange = (category: "Top" | "Bottom" | "Shoes") => {
+    if (category === selectedCategory) return; // Prevent unnecessary resets
     setSelectedCategory(category);
-    setCurrentSubCategoryIndex(0);
+    // State reset is handled in useEffect
   };
 
   // Loading state
@@ -245,9 +378,10 @@ export default function OutfitSwipeDeck() {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
-            onPress={() =>
-              fetchOutfitItems(selectedCategory, currentSubCategoryIndex)
-            }
+            onPress={() => {
+              retryCountRef.current = 0;
+              fetchOutfitItems(selectedCategory, currentSubCategoryIndex, false);
+            }}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
@@ -258,24 +392,64 @@ export default function OutfitSwipeDeck() {
 
   const currentItem = outfitItems[currentIndex];
 
-  // No more items
-  if (currentIndex >= outfitItems.length || !currentItem) {
+  // No more items - only show if we've exhausted all items and subcategories
+  const apiCategories = CATEGORY_MAP[selectedCategory];
+  const hasMoreSubcategories =
+    currentSubCategoryIndex + 1 < apiCategories.length;
+  const hasMoreCachedItems = allFetchedItems.length > outfitItems.length;
+
+  // Guard: Don't render if currentItem is undefined
+  if (!currentItem) {
+    // If loading, show loading state
+    if (loading) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FF6B35" />
+            <Text style={styles.loadingText}>Loading items...</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    
+    // Check if we should show empty state or wait for more items
+    if (
+      !hasMoreCachedItems &&
+      !hasMoreSubcategories &&
+      !hasMoreItems
+    ) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>No more items! 🎉</Text>
+            <Text style={styles.emptySubtitle}>
+              You have reviewed all {selectedCategory} items.
+            </Text>
+            <TouchableOpacity
+              style={styles.resetButton}
+              onPress={() => {
+                setCurrentIndex(0);
+                setLikedItems([]);
+                setCurrentSubCategoryIndex(0);
+                setAllFetchedItems([]);
+                setOutfitItems([]);
+                setHasMoreItems(true);
+                fetchOutfitItems(selectedCategory, 0, false);
+              }}
+            >
+              <Text style={styles.resetButtonText}>Start Over</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    
+    // If more items might be available, show loading
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No more items! 🎉</Text>
-          <Text style={styles.emptySubtitle}>
-            You have reviewed all {selectedCategory} items.
-          </Text>
-          <TouchableOpacity
-            style={styles.resetButton}
-            onPress={() => {
-              setCurrentIndex(0);
-              setLikedItems([]);
-            }}
-          >
-            <Text style={styles.resetButtonText}>Start Over</Text>
-          </TouchableOpacity>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+          <Text style={styles.loadingText}>Loading items...</Text>
         </View>
       </SafeAreaView>
     );
@@ -365,7 +539,7 @@ export default function OutfitSwipeDeck() {
           {/* Item Image */}
           <View style={styles.imageContainer}>
             <Image
-              source={{ uri: currentItem.ImageURL }}
+              source={{ uri: currentItem.imageUrl }}
               style={styles.itemImage}
               resizeMode="cover"
             />
