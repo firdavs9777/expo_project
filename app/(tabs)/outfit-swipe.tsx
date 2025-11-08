@@ -49,7 +49,7 @@ export default function OutfitSwipeDeck() {
 
   // Get color type from params or use default
   const personalColorType =
-    (params.personalColorType as string) || "Deep Winter";
+    (params.personalColorType as string) || "Deep Autumn";
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedItems, setLikedItems] = useState<number[]>([]);
@@ -368,6 +368,21 @@ export default function OutfitSwipeDeck() {
         setCurrentIndex(nextIndex);
         return;
       }
+    }
+
+    // No more cached items, try to fetch next subcategory
+    const apiCategories = CATEGORY_MAP[selectedCategory];
+    const hasMoreSubcategories = currentSubCategoryIndex + 1 < apiCategories.length;
+    
+    if (hasMoreSubcategories && hasMoreItems) {
+      // Automatically fetch next subcategory
+      const nextSubCategoryIndex = currentSubCategoryIndex + 1;
+      setCurrentSubCategoryIndex(nextSubCategoryIndex);
+      fetchOutfitItems(selectedCategory, nextSubCategoryIndex, false);
+      // Reset position and wait for new items
+      position.setValue({ x: 0, y: 0 });
+      setCurrentIndex(0);
+      return;
     }
 
     // No more items available in current subcategory
