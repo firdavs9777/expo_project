@@ -357,7 +357,7 @@ export default function WardrobeScreen() {
 
       console.log("Sending full outfit try-on request...");
       const response = await fetch(
-        `${API_BASE_URL}/api/try-on/generate-full-outfit`,
+        `${API_BASE_URL}/api/try-on/generate-full-outfit/on-sequential`,
         {
           method: "POST",
           headers: {
@@ -388,7 +388,7 @@ export default function WardrobeScreen() {
         console.log("Full response:", JSON.stringify(data, null, 2));
         
         // Try multiple possible field names for the result image
-        resultImage = data.try_on_full_outfit_image || data.try_on_image || data.image || data.result_image || data.result || data.data;
+        resultImage = data.try_on_full_outfit_on_sequential_image || data.try_on_full_outfit_image || data.try_on_image || data.image || data.result_image || data.result || data.data;
         
         if (!resultImage) {
           console.error("No image field found in response. Available keys:", Object.keys(data));

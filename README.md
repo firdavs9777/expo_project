@@ -1,50 +1,141 @@
-# Welcome to your Expo app 👋
+# StylerX - Personal Style & Color Analysis App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A React Native app built with Expo that helps users discover their personal color season, try on outfits virtually, and manage their wardrobe.
 
-## Get started
+## Features
 
-1. Install dependencies
+- 🎨 **Personal Color Analysis** - AI-powered color season detection from photos
+- 👔 **Virtual Try-On** - See how outfits look on you before buying
+- 👕 **Wardrobe Management** - Save and organize your favorite items
+- 📱 **Outfit Swiping** - Discover new styles with Tinder-like swiping
+- 👤 **User Profiles** - Track your color analysis results and preferences
 
-   ```bash
-   npm install
-   ```
+## Prerequisites
 
-2. Start the app
+- **Node.js** (v18 or higher)
+- **npm** or **yarn**
+- **Expo CLI** (installed globally or via npx)
+- **iOS Simulator** (for Mac) or **Android Studio** (for Android development)
+- **Expo Go app** (optional, for testing on physical devices)
 
-   ```bash
-   npx expo start
-   ```
+## Quick Start
 
-In the output, you'll find options to open the app in a
+### 1. Install Dependencies
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+```bash
+npm install
+```
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### 2. Start the Development Server
 
-## Get a fresh project
+```bash
+npm start
+```
 
-When you're ready, run:
+or
 
+```bash
+npx expo start
+```
+
+### 3. Run on Your Device/Simulator
+
+After starting the server, you'll see options to:
+
+- Press `i` to open in **iOS Simulator**
+- Press `a` to open in **Android Emulator**
+- Scan QR code with **Expo Go** app on your phone
+- Press `w` to open in **web browser**
+
+## Available Scripts
+
+```bash
+# Start development server
+npm start
+
+# Start with tunnel (for testing on physical devices)
+npm run start:tunnel
+
+# Run on iOS
+npm run ios
+
+# Run on Android
+npm run android
+
+# Run on web
+npm run web
+
+# Lint code
+npm run lint
+```
+
+## Project Structure
+
+```
+expo_project/
+├── app/                    # Main app screens (file-based routing)
+│   ├── (tabs)/            # Tab navigation screens
+│   ├── onboarding/       # Onboarding flow
+│   └── ...
+├── components/            # Reusable components
+├── contexts/              # React contexts (Auth, etc.)
+├── utils/                 # Utility functions
+└── assets/               # Images and static assets
+```
+
+## API Configuration
+
+The app connects to a backend API. The base URL is configured in individual screen files:
+
+```typescript
+const API_BASE_URL = "https://stylist-ai-be.onrender.com";
+```
+
+## Key Technologies
+
+- **Expo** ~54.0.22
+- **React Native** 0.81.5
+- **React** 19.1.0
+- **Expo Router** (file-based routing)
+- **TypeScript**
+- **Expo Camera** (for photo capture)
+- **Expo Image Picker** (for gallery access)
+
+## Permissions
+
+The app requires the following permissions:
+- **Camera** - For taking photos for color analysis
+- **Photo Library** - For selecting and saving images
+
+These are automatically requested when needed.
+
+## Troubleshooting
+
+### iOS Build Issues
+```bash
+cd ios
+pod install
+cd ..
+npm run ios
+```
+
+### Clear Cache
+```bash
+npx expo start --clear
+```
+
+### Reset Project
 ```bash
 npm run reset-project
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Development Notes
 
-## Learn more
+- Uses **Expo Router** for navigation (file-based routing)
+- Authentication is handled via `AuthContext`
+- Color analysis results are saved to user profile
+- Virtual try-on uses sequential image processing
 
-To learn more about developing your project with Expo, look at the following resources:
+## License
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Private project

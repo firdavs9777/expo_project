@@ -1,6 +1,9 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Dimensions,
   ScrollView,
   Share,
@@ -13,9 +16,13 @@ import {
 
 const { width } = Dimensions.get("window");
 
+const API_BASE_URL = "https://stylist-ai-be.onrender.com";
+
 export default function AnalysisResultsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { isLoggedIn, user } = useAuth();
+  const [saving, setSaving] = useState(false);
 
   // Parse the upload data from camera screen
   let analysisData;
@@ -29,16 +36,42 @@ export default function AnalysisResultsScreen() {
 
   // Use backend data if available, otherwise use default
   const result = analysisData || {
-    confidence: 0.75,
+    confidence: 0.95,
     personal_color_type: "Autumn Warm",
     reasoning: "Default analysis - please take a photo for accurate results",
     season: "autumn",
     subtype: "warm",
     undertone: "warm",
+    contrast: "medium",
   };
 
-  const { confidence, personal_color_type, undertone, reasoning, season } =
-    result;
+  const {
+    confidence,
+    personal_color_type,
+    undertone,
+    reasoning,
+    season: seasonFromResult,
+    contrast,
+  } = result;
+
+  // Extract season from personal_color_type if season is not directly available
+  // e.g., "Autumn Warm" -> "autumn", "Winter Cool" -> "winter"
+  const extractSeason = (colorType: string): string => {
+    if (!colorType) return "autumn";
+    const lower = colorType.toLowerCase();
+    if (lower.includes("winter")) return "winter";
+    if (lower.includes("spring")) return "spring";
+    if (lower.includes("summer")) return "summer";
+    if (lower.includes("autumn") || lower.includes("fall")) return "autumn";
+    return "autumn"; // default fallback
+  };
+
+  const season = seasonFromResult || extractSeason(personal_color_type || "");
+
+  // Debug logging
+  console.log("Analysis Result:", JSON.stringify(result, null, 2));
+  console.log("Extracted season:", season);
+  console.log("Personal color type:", personal_color_type);
 
   // Color palettes based on season
   const colorPalettes: Record<string, { color: string; name: string }[]> = {
@@ -88,31 +121,115 @@ export default function AnalysisResultsScreen() {
     ],
   };
 
-  const colorPalette =
-    colorPalettes[season.toLowerCase()] || colorPalettes.autumn;
+  const seasonKey = season?.toLowerCase() || "autumn";
+  const colorPalette = colorPalettes[seasonKey] || colorPalettes.autumn;
+
+  // Debug logging
+  console.log("Season key:", seasonKey);
+  console.log("Color palette length:", colorPalette?.length || 0);
+
+  // Format confidence as percentage
+  const confidencePercent = Math.round(
+    typeof confidence === "number" ? confidence * 100 : parseFloat(confidence) || 95
+  );
+
+  // Format undertone
+  const undertoneFormatted =
+    undertone?.charAt(0).toUpperCase() + undertone?.slice(1) || "Warm";
+
+  // Format contrast
+  const contrastFormatted =
+    contrast?.charAt(0).toUpperCase() + contrast?.slice(1) || "Medium";
 
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `My personal color type is ${personal_color_type} from BananaTalk! 🍌`,
+        message: `My personal color type is ${personal_color_type}!`,
       });
     } catch (error) {
       console.error(error);
     }
   };
 
-  const handleSaveResults = () => {
-    // Save to profile and navigate to main app
-    router.replace("/login");
+  const handleSaveResults = async () => {
+    // Check if user is logged in
+    if (!isLoggedIn || !user) {
+      // Navigate to login page if not logged in
+      router.push("/login");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      // Prepare color analysis data to save using the dedicated endpoint
+      const colorAnalysisData = {
+        personal_color_type: personal_color_type || "",
+        confidence: confidencePercent / 100, // Convert back to decimal (0-1)
+        undertone: undertone || "unknown",
+        season: season || "unknown",
+        subtype: result.subtype || "unknown",
+        reasoning: reasoning || "",
+      };
+
+      console.log("Saving color analysis data:", JSON.stringify(colorAnalysisData, null, 2));
+
+      // Save color analysis results using the dedicated endpoint
+      const response = await fetch(
+        `${API_BASE_URL}/api/user/color/save`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${user.access_token}`,
+          },
+          body: JSON.stringify(colorAnalysisData),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Failed to save color analysis:", errorText);
+        console.error("Response status:", response.status);
+        Alert.alert(
+          "Error",
+          "Failed to save results. Please try again.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      const savedData = await response.json();
+      console.log("Color analysis saved successfully:", savedData);
+      console.log("Saved color analysis keys:", Object.keys(savedData));
+
+      // Success - navigate to profile
+      Alert.alert("Success", "Your color analysis has been saved!", [
+        {
+          text: "OK",
+          onPress: () => router.replace("/(tabs)/profile"),
+        },
+      ]);
+    } catch (error) {
+      console.error("Error saving results:", error);
+      Alert.alert(
+        "Error",
+        "An error occurred while saving. Please try again.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleRetakeAnalysis = () => {
-    router.push("/cameraProfile");
+    router.push("/onboarding/camera-profile");
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -122,142 +239,90 @@ export default function AnalysisResultsScreen() {
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Color Analysis Results</Text>
+        <Text style={styles.headerTitle}>RESULTS</Text>
         <TouchableOpacity onPress={handleShare}>
           <Text style={styles.shareIcon}>↗</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Results Banner */}
-        <View style={styles.bannerContainer}>
-          <Text style={styles.bannerSubtext}>Your personal color is</Text>
-          <Text style={styles.bannerTitle}>{personal_color_type}</Text>
-          <Text style={styles.bannerSubtitle}>
-            ({undertone === "cool" ? "쿨톤" : "웜톤"})
-          </Text>
-        </View>
-
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Confidence</Text>
-            <Text style={styles.statValue}>
-              {Math.round(confidence * 100)}%
-            </Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* White Card Container */}
+        <View style={styles.card}>
+          {/* Personal Color Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>YOUR PERSONAL COLOR</Text>
+            <Text style={styles.personalColor}>{personal_color_type}</Text>
+            <View style={styles.divider} />
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Undertone</Text>
-            <Text style={styles.statValue}>
-              {undertone.charAt(0).toUpperCase() + undertone.slice(1)}
-            </Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Season</Text>
-            <Text style={styles.statValue}>
-              {season.charAt(0).toUpperCase() + season.slice(1)}
-            </Text>
-          </View>
-        </View>
 
-        {/* Color Palette */}
-        <View style={styles.paletteContainer}>
-          <Text style={styles.sectionTitle}>Your Best Colors</Text>
-          <View style={styles.colorGrid}>
-            {colorPalette.map((item, index) => (
-              <View key={index} style={styles.colorItem}>
-                <View
-                  style={[styles.colorSwatch, { backgroundColor: item.color }]}
-                />
-                <Text style={styles.colorName}>{item.name}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Analysis Summary */}
-        <View style={styles.descriptionContainer}>
-          <Text style={styles.descriptionTitle}>Analysis Summary</Text>
-          <Text style={styles.descriptionText}>{reasoning}</Text>
-
-          {confidence < 0.5 && (
-            <View style={styles.warningBox}>
-              <Text style={styles.warningTitle}>⚠️ Low Confidence</Text>
-              <Text style={styles.warningText}>
-                The analysis confidence is below 50%. For better results, retake
-                the photo in natural daylight without makeup or filters.
-              </Text>
+          {/* Analysis Details Section */}
+          <View style={styles.analysisSection}>
+            <View style={styles.analysisColumn}>
+              <Text style={styles.analysisLabel}>CONFIDENCE</Text>
+              <Text style={styles.analysisValue}>{confidencePercent}%</Text>
             </View>
-          )}
-        </View>
+            <View style={styles.analysisColumn}>
+              <Text style={styles.analysisLabel}>UNDERTONE</Text>
+              <Text style={styles.analysisValue}>{undertoneFormatted}</Text>
+            </View>
+            <View style={styles.analysisColumn}>
+              <Text style={styles.analysisLabel}>CONTRAST</Text>
+              <Text style={styles.analysisValue}>{contrastFormatted}</Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
 
-        {/* Recommendations */}
-        <View style={styles.recommendationsContainer}>
-          <Text style={styles.sectionTitle}>Styling Tips</Text>
-
-          <View style={styles.tipCard}>
-            <Text style={styles.tipEmoji}>👗</Text>
-            <View style={styles.tipContent}>
-              <Text style={styles.tipTitle}>Best Colors to Wear</Text>
-              <Text style={styles.tipText}>
-                {season === "winter" &&
-                  "Deep, jewel-toned colors like navy, burgundy, and emerald"}
-                {season === "autumn" &&
-                  "Warm, earthy tones like terracotta, olive, and rust"}
-                {season === "spring" &&
-                  "Bright, clear colors like coral, peach, and warm pink"}
-                {season === "summer" &&
-                  "Soft, muted colors like lavender, powder blue, and mauve"}
-              </Text>
+          {/* Color Palette Section */}
+          <View style={styles.paletteSection}>
+            <Text style={styles.sectionLabel}>YOUR PALETTE</Text>
+            <View style={styles.colorGrid}>
+              {colorPalette && colorPalette.length > 0 ? (
+                colorPalette.slice(0, 9).map((item, index) => (
+                  <View
+                    key={index}
+                    style={[styles.colorSquare, { backgroundColor: item.color }]}
+                  />
+                ))
+              ) : (
+                // Fallback: show autumn colors if palette is empty
+                colorPalettes.autumn.slice(0, 9).map((item, index) => (
+                  <View
+                    key={index}
+                    style={[styles.colorSquare, { backgroundColor: item.color }]}
+                  />
+                ))
+              )}
             </View>
           </View>
 
-          <View style={styles.tipCard}>
-            <Text style={styles.tipEmoji}>💄</Text>
-            <View style={styles.tipContent}>
-              <Text style={styles.tipTitle}>Makeup Recommendations</Text>
-              <Text style={styles.tipText}>
-                {undertone === "cool"
-                  ? "Cool-toned pinks, berries, and blue-based reds"
-                  : "Warm-toned corals, peaches, and orange-based reds"}
-              </Text>
-            </View>
-          </View>
+          {/* Action Buttons */}
+          <View style={styles.buttonsContainer}>
+            <TouchableOpacity
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={handleSaveResults}
+              activeOpacity={0.8}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.saveButtonText}>SAVE RESULTS</Text>
+              )}
+            </TouchableOpacity>
 
-          <View style={styles.tipCard}>
-            <Text style={styles.tipEmoji}>💎</Text>
-            <View style={styles.tipContent}>
-              <Text style={styles.tipTitle}>Accessories</Text>
-              <Text style={styles.tipText}>
-                {undertone === "cool"
-                  ? "Silver jewelry, platinum, white gold"
-                  : "Gold jewelry, brass, copper accents"}
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.retakeButton}
+              onPress={handleRetakeAnalysis}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retakeButtonText}>RETAKE ANALYSIS</Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        <View style={{ height: 160 }} />
       </ScrollView>
-
-      {/* Bottom Actions */}
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={handleSaveResults}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.primaryButtonText}>Continue to App</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={handleRetakeAnalysis}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.secondaryButtonText}>Retake Analysis</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -265,7 +330,7 @@ export default function AnalysisResultsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#E5E5E5", // Light gray background
   },
   header: {
     flexDirection: "row",
@@ -278,202 +343,127 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "#2a2a2a",
     justifyContent: "center",
     alignItems: "center",
   },
   backButtonText: {
-    color: "#fff",
+    color: "#333333", // Dark gray
     fontSize: 24,
     fontWeight: "bold",
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#fff",
+    color: "#333333", // Dark gray
+    letterSpacing: 0.5,
   },
   shareIcon: {
-    color: "#fff",
-    fontSize: 24,
-  },
-  bannerContainer: {
-    paddingHorizontal: 30,
-    paddingVertical: 30,
-    alignItems: "center",
-  },
-  bannerSubtext: {
-    fontSize: 14,
-    color: "#999",
-    marginBottom: 8,
-  },
-  bannerTitle: {
-    fontSize: 36,
+    color: "#333333", // Dark gray
+    fontSize: 20,
     fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 4,
   },
-  bannerSubtitle: {
-    fontSize: 18,
-    color: "#999",
-  },
-  statsContainer: {
-    flexDirection: "row",
+  scrollContent: {
     paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 30,
+    paddingBottom: 40,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#2a2a2a",
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 24,
+    marginTop: 10,
   },
-  statLabel: {
-    fontSize: 12,
-    color: "#999",
+  section: {
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#999999", // Light gray
+    letterSpacing: 0.5,
     marginBottom: 8,
+    textTransform: "uppercase",
   },
-  statValue: {
-    fontSize: 20,
+  personalColor: {
+    fontSize: 28,
     fontWeight: "bold",
-    color: "#FF6B35",
+    color: "#000000",
+    marginBottom: 16,
   },
-  paletteContainer: {
-    paddingHorizontal: 30,
-    marginBottom: 30,
+  divider: {
+    height: 1,
+    backgroundColor: "#E5E5E5",
+    marginVertical: 20,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
+  analysisSection: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 20,
+  },
+  analysisColumn: {
+    flex: 1,
+    alignItems: "flex-start",
+  },
+  analysisLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#999999", // Light gray
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  analysisValue: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#000000",
+  },
+  paletteSection: {
+    marginBottom: 32,
   },
   colorGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
-  },
-  colorItem: {
-    width: (width - 84) / 3,
-    alignItems: "center",
-  },
-  colorSwatch: {
-    width: "100%",
-    aspectRatio: 1,
-    borderRadius: 16,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  colorName: {
-    fontSize: 11,
-    color: "#999",
-    textAlign: "center",
-  },
-  descriptionContainer: {
-    paddingHorizontal: 30,
-    marginBottom: 30,
-  },
-  descriptionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 12,
-  },
-  descriptionText: {
-    fontSize: 14,
-    color: "#999",
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  warningBox: {
-    backgroundColor: "#FF6B35",
-    borderRadius: 12,
-    padding: 16,
+    justifyContent: "space-between",
     marginTop: 16,
   },
-  warningTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 8,
-  },
-  warningText: {
-    fontSize: 13,
-    color: "#fff",
-    lineHeight: 20,
-  },
-  recommendationsContainer: {
-    paddingHorizontal: 30,
-    marginBottom: 20,
-  },
-  tipCard: {
-    flexDirection: "row",
-    backgroundColor: "#2a2a2a",
-    borderRadius: 16,
-    padding: 16,
+  colorSquare: {
+    width: (width - 88) / 3 - 6, // Account for padding and margins
+    height: (width - 88) / 3 - 6, // Make it square
+    borderRadius: 4,
     marginBottom: 12,
-    gap: 16,
+    minWidth: 80,
+    minHeight: 80,
   },
-  tipEmoji: {
-    fontSize: 32,
-  },
-  tipContent: {
-    flex: 1,
-  },
-  tipTitle: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 6,
-  },
-  tipText: {
-    fontSize: 13,
-    color: "#999",
-    lineHeight: 20,
-  },
-  actionsContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#1a1a1a",
-    paddingHorizontal: 30,
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
+  buttonsContainer: {
     gap: 12,
   },
-  primaryButton: {
-    backgroundColor: "#FF6B35",
-    borderRadius: 30,
-    paddingVertical: 18,
+  saveButton: {
+    backgroundColor: "#000000",
+    borderRadius: 8,
+    paddingVertical: 16,
     alignItems: "center",
   },
-  primaryButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+  saveButtonDisabled: {
+    backgroundColor: "#666666",
+    opacity: 0.7,
   },
-  secondaryButton: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 30,
-    paddingVertical: 18,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#3a3a3a",
-  },
-  secondaryButtonText: {
-    color: "#fff",
+  saveButtonText: {
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+    letterSpacing: 0.5,
+  },
+  retakeButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#000000",
+  },
+  retakeButtonText: {
+    color: "#000000",
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
 });

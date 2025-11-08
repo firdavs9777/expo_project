@@ -10,59 +10,60 @@ import {
   View,
 } from "react-native";
 
-const { height } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
 export default function LanguageSelectScreen() {
   const router = useRouter();
   const { isLoggedIn, isLoading } = useAuth();
-  // ✅ Redirect if already logged in
+  
+  // Redirect if already logged in
   useEffect(() => {
     if (isLoggedIn) {
       router.replace("/(tabs)/profile");
     }
   }, [isLoggedIn, isLoading, router]);
+  
   const [selectedLanguage, setSelectedLanguage] = useState("");
 
   const handleLanguageSelect = (language: string) => {
     setSelectedLanguage(language);
-    setTimeout(() => {
-      router.push("/(tabs)/profile");
-    }, 300);
+    // Navigate to preparation screen
+    router.push("/onboarding/preparation");
   };
+
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
 
-      <View style={styles.iconContainer}>
-        <View style={styles.iconCircle}>
-          <Text style={styles.iconEmoji}>🎨</Text>
+      {/* Top Label */}
+      <Text style={styles.topLabel}>Language Select</Text>
+
+      {/* White Card */}
+      <View style={styles.card}>
+        {/* Brand Name */}
+        <Text style={styles.brandName}>STYLERX</Text>
+
+        {/* Instructional Text */}
+        <Text style={styles.instructionText}>Choose your language.</Text>
+
+        {/* Language Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.languageButton}
+            onPress={() => handleLanguageSelect("en")}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.languageButtonText}>ENGLISH</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.languageButton}
+            onPress={() => handleLanguageSelect("ko")}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.languageButtonText}>한국어</Text>
+          </TouchableOpacity>
         </View>
-      </View>
-
-      {/* Welcome Text */}
-      <View style={styles.welcomeContainer}>
-        <Text style={styles.welcomeTitle}>Welcome</Text>
-        <Text style={styles.welcomeSubtitle}>
-          Select your preferred language.
-        </Text>
-      </View>
-
-      {/* Language Buttons */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.languageButton, styles.primaryLanguageButton]}
-          onPress={() => handleLanguageSelect("ko")}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.primaryLanguageText}>한국어</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.languageButton, styles.secondaryLanguageButton]}
-          onPress={() => handleLanguageSelect("en")}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.secondaryLanguageText}>English</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -71,65 +72,59 @@ export default function LanguageSelectScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
-    paddingHorizontal: 30,
-  },
-  iconContainer: {
+    backgroundColor: "#E5E5E5",
+    paddingHorizontal: 20,
+    paddingTop: 60,
     alignItems: "center",
-    marginTop: height * 0.15,
-  },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#FF6B35",
     justifyContent: "center",
+  },
+  topLabel: {
+    fontSize: 14,
+    color: "#999999",
+    alignSelf: "flex-start",
+    marginBottom: 20,
+    marginLeft: 10,
+  },
+  card: {
+    width: width - 40,
+    maxWidth: 500,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 40,
     alignItems: "center",
   },
-  iconEmoji: {
-    fontSize: 40,
+  brandName: {
+    fontSize: 48,
+    fontWeight: "400",
+    color: "#000000",
+    letterSpacing: 8,
+    marginBottom: 30,
+    fontFamily: "serif",
   },
-  welcomeContainer: {
-    alignItems: "center",
-    marginTop: 50,
-    marginBottom: 60,
-  },
-  welcomeTitle: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 12,
-  },
-  welcomeSubtitle: {
+  instructionText: {
     fontSize: 16,
-    color: "#999",
+    color: "#666666",
+    marginBottom: 40,
     textAlign: "center",
   },
   buttonContainer: {
-    flex: 1,
+    width: "100%",
+    gap: 16,
   },
   languageButton: {
-    paddingVertical: 18,
-    borderRadius: 25,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  primaryLanguageButton: {
-    backgroundColor: "#FF6B35",
-  },
-  secondaryLanguageButton: {
-    backgroundColor: "#2a2a2a",
+    width: "100%",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#3a3a3a",
+    borderColor: "#000000",
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  primaryLanguageText: {
-    color: "#fff",
-    fontSize: 18,
+  languageButtonText: {
+    fontSize: 16,
     fontWeight: "600",
-  },
-  secondaryLanguageText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
+    color: "#000000",
+    letterSpacing: 0.5,
   },
 });

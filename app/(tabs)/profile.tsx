@@ -2,8 +2,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,19 +17,74 @@ import {
   View,
 } from "react-native";
 
+const API_BASE_URL = "https://stylist-ai-be.onrender.com";
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, isLoggedIn, logout } = useAuth();
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [colorAnalysis, setColorAnalysis] = useState<any>(null);
 
-  // Fetch user profile on mount
+  // Fetch user profile and color analysis on mount
   useEffect(() => {
     if (isLoggedIn && user?.access_token) {
       fetchUserProfile();
+      fetchColorAnalysis();
     }
   }, [isLoggedIn, user]);
+
+  // Refetch profile when screen comes into focus (e.g., after saving analysis)
+  useFocusEffect(
+    useCallback(() => {
+      if (isLoggedIn && user?.access_token) {
+        fetchUserProfile();
+        fetchColorAnalysis();
+      }
+    }, [isLoggedIn, user])
+  );
+
+  // Fetch color analysis data from backend
+  const fetchColorAnalysis = async () => {
+    try {
+      console.log("Fetching color analysis...");
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/user/color/results?limit=1`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${user?.access_token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Color analysis fetched successfully:", data);
+        
+        // Get the most recent result (first item in the array)
+        if (Array.isArray(data) && data.length > 0) {
+          setColorAnalysis(data[0]);
+          console.log("Using most recent color analysis:", data[0]);
+        } else {
+          console.log("No color analysis results found");
+          setColorAnalysis(null);
+        }
+      } else if (response.status === 404) {
+        // No color analysis saved yet
+        console.log("No color analysis found");
+        setColorAnalysis(null);
+      } else {
+        console.log("Failed to fetch color analysis, status:", response.status);
+        setColorAnalysis(null);
+      }
+    } catch (error) {
+      console.error("Error fetching color analysis:", error);
+      setColorAnalysis(null);
+    }
+  };
 
   // Fetch user profile from backend
   const fetchUserProfile = async () => {
@@ -37,7 +92,7 @@ export default function ProfileScreen() {
       console.log("Fetching user profile...");
 
       const response = await fetch(
-        "https://stylist-ai-be.onrender.com/api/user/profile",
+        `${API_BASE_URL}/api/user/profile`,
         {
           method: "GET",
           headers: {
@@ -329,9 +384,15 @@ export default function ProfileScreen() {
           name: user.email.split("@")[0] || "User",
           email: user.email,
           avatar: profileImage || `https://i.pravatar.cc/300?u=${user.user_id}`,
-          colorSeason: "Autumn Warm", // TODO: Fetch from backend
-          undertone: "Warm",
-          contrast: "Medium",
+          colorSeason: colorAnalysis?.personal_color_type || "Not analyzed",
+          undertone: colorAnalysis?.undertone 
+            ? colorAnalysis.undertone.charAt(0).toUpperCase() + colorAnalysis.undertone.slice(1)
+            : "Unknown",
+          contrast: colorAnalysis?.contrast
+            ? colorAnalysis.contrast.charAt(0).toUpperCase() + colorAnalysis.contrast.slice(1)
+            : colorAnalysis?.subtype
+            ? colorAnalysis.subtype.charAt(0).toUpperCase() + colorAnalysis.subtype.slice(1)
+            : "Unknown",
           age: userProfile?.age || null,
           gender: userProfile?.gender || null,
           height: userProfile?.height || null,
@@ -363,7 +424,8 @@ export default function ProfileScreen() {
           await logout();
           setProfileImage(null);
           setUserProfile(null);
-          Alert.alert("Logged Out", "You have been logged out successfully");
+          // Navigate to login screen after logout
+          router.replace("/login");
         },
       },
     ]);
@@ -371,15 +433,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity style={styles.shareButton}>
-          <Text style={styles.shareIcon}>↗</Text>
-        </TouchableOpacity>
-      </View>
+      <StatusBar barStyle="dark-content" />
 
       <ScrollView
         style={styles.scrollView}
@@ -387,44 +441,37 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            <Image source={{ uri: displayData.avatar }} style={styles.avatar} />
-
-            {/* Edit Button */}
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={handleImageUpload}
-              disabled={uploadingImage}
-            >
-              {uploadingImage ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="camera" size={20} color="#fff" />
-              )}
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Profile</Text>
+            <TouchableOpacity style={styles.shareButton}>
+              <Ionicons name="share-outline" size={20} color="#000000" />
             </TouchableOpacity>
-
-            {!isLoggedIn && (
-              <View style={styles.guestBadge}>
-                <Text style={styles.guestText}>Guest</Text>
-              </View>
-            )}
           </View>
 
-          {/* Name & Email */}
-          <Text style={styles.name}>{displayData.name}</Text>
-          <Text style={styles.email}>{displayData.email}</Text>
+          {/* Avatar Section */}
+          <View style={styles.avatarSection}>
+            <Text style={styles.avatarLabel}>Avatar</Text>
+            <View style={styles.avatarContainer}>
+              <Image source={{ uri: displayData.avatar }} style={styles.avatar} />
+              <TouchableOpacity
+                style={styles.reuploadButton}
+                onPress={handleImageUpload}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color="#000000" />
+                ) : (
+                  <>
+                    <Ionicons name="pencil" size={16} color="#000000" />
+                    <Text style={styles.reuploadText}>Re-upload Picture</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
 
-          {/* Login Button if not logged in */}
-          {!isLoggedIn && (
-            <TouchableOpacity
-              style={styles.loginButton}
-              onPress={() => router.push("/login")}
-            >
-              <Text style={styles.loginButtonText}>Log In</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Color Analysis Info - only if logged in */}
+          {/* Color Analysis Info */}
           {isLoggedIn && (
             <View style={styles.analysisContainer}>
               <View style={styles.analysisRow}>
@@ -449,48 +496,12 @@ export default function ProfileScreen() {
                 <Text style={styles.analysisLabel}>Contrast</Text>
                 <Text style={styles.analysisValue}>{displayData.contrast}</Text>
               </View>
-
-              {/* Additional profile info if available */}
-              {displayData.age && (
-                <>
-                  <View style={styles.divider} />
-                  <View style={styles.analysisRow}>
-                    <Text style={styles.analysisLabel}>Age</Text>
-                    <Text style={styles.analysisValue}>{displayData.age}</Text>
-                  </View>
-                </>
-              )}
-
-              {displayData.gender && (
-                <>
-                  <View style={styles.divider} />
-                  <View style={styles.analysisRow}>
-                    <Text style={styles.analysisLabel}>Gender</Text>
-                    <Text style={styles.analysisValue}>
-                      {displayData.gender}
-                    </Text>
-                  </View>
-                </>
-              )}
             </View>
           )}
-        </View>
 
-        {/* Menu Options */}
-        <View style={styles.menuContainer}>
+          {/* Retake Analysis Button */}
           <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() =>
-              handleMenuPress(() => router.push("/(tabs)/wardrobe"))
-            }
-          >
-            <Text style={styles.menuIcon}>👗</Text>
-            <Text style={styles.menuText}>My Wardrobe</Text>
-            <Text style={styles.menuArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
+            style={styles.retakeButton}
             onPress={() => {
               if (!isLoggedIn) {
                 Alert.alert(
@@ -509,80 +520,24 @@ export default function ProfileScreen() {
                 );
                 return;
               }
-              router.push("/liked-items");
+              router.push("/onboarding/camera-profile");
             }}
           >
-            <Text style={styles.menuIcon}>❤️</Text>
-            <Text style={styles.menuText}>Liked Items</Text>
-            <Text style={styles.menuArrow}>›</Text>
+            <Text style={styles.retakeButtonText}>Retake Analysis</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => handleMenuPress(() => console.log("Order History"))}
-          >
-            <Text style={styles.menuIcon}>📦</Text>
-            <Text style={styles.menuText}>Order History</Text>
-            <Text style={styles.menuArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() =>
-              handleMenuPress(() => console.log("Brand Preferences"))
-            }
-          >
-            <Text style={styles.menuIcon}>🏷️</Text>
-            <Text style={styles.menuText}>Brand Preferences</Text>
-            <Text style={styles.menuArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => handleMenuPress(() => console.log("Settings"))}
-          >
-            <Text style={styles.menuIcon}>⚙️</Text>
-            <Text style={styles.menuText}>Settings</Text>
-            <Text style={styles.menuArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => {
-              if (!isLoggedIn) {
-                Alert.alert(
-                  "Login Required",
-                  "Please log in to access this feature",
-                  [
-                    {
-                      text: "Cancel",
-                      style: "cancel",
-                    },
-                    {
-                      text: "Log In",
-                      onPress: () => router.push("/login"),
-                    },
-                  ]
-                );
-                return;
-              }
-              router.push("/analysis-history");
-            }}
-          >
-            <Text style={styles.menuIcon}>📊</Text>
-            <Text style={styles.menuText}>
-              {isLoggedIn ? "Retake Analysis" : "Take Color Analysis"}
-            </Text>
-            <Text style={styles.menuArrow}>›</Text>
-          </TouchableOpacity>
+          {/* Logout Button */}
+          {isLoggedIn && (
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="log-out-outline" size={20} color="#000000" />
+              <Text style={styles.logoutButtonText}>Log Out</Text>
+            </TouchableOpacity>
+          )}
         </View>
-
-        {/* Logout Button - only show if logged in */}
-        {isLoggedIn && (
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutText}>Log Out</Text>
-          </TouchableOpacity>
-        )}
 
         {/* Bottom Spacing */}
         <View style={{ height: 40 }} />
@@ -594,124 +549,85 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#f5f5f5",
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 20,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
     paddingVertical: 20,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  shareButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#2a2a2a",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  shareIcon: {
-    color: "#fff",
-    fontSize: 20,
+    paddingHorizontal: 20,
   },
   profileCard: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    borderRadius: 20,
-    padding: 30,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  avatarContainer: {
-    marginBottom: 20,
-    position: "relative",
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#f0f0f0",
-  },
-  editButton: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FF6B35",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 3,
-    borderColor: "#fff",
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 24,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  guestBadge: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    backgroundColor: "#FF6B35",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
   },
-  guestText: {
-    color: "#fff",
-    fontSize: 12,
+  headerTitle: {
+    fontSize: 20,
     fontWeight: "bold",
+    color: "#000000",
   },
-  name: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#000",
-    marginBottom: 4,
+  shareButton: {
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  email: {
+  avatarSection: {
+    marginBottom: 24,
+  },
+  avatarLabel: {
     fontSize: 14,
-    color: "#666",
-    marginBottom: 20,
+    fontWeight: "500",
+    color: "#000000",
+    marginBottom: 12,
   },
-  loginButton: {
-    backgroundColor: "#FF6B35",
-    paddingVertical: 12,
-    paddingHorizontal: 40,
-    borderRadius: 25,
-    marginBottom: 20,
+  avatarContainer: {
+    position: "relative",
+    alignItems: "center",
   },
-  loginButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
+  avatar: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: "#f5f5f5",
+  },
+  reuploadButton: {
+    position: "absolute",
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#000000",
+    gap: 8,
+  },
+  reuploadText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#000000",
   },
   analysisContainer: {
     width: "100%",
-    marginTop: 10,
+    marginBottom: 24,
   },
   analysisRow: {
     flexDirection: "row",
@@ -721,57 +637,47 @@ const styles = StyleSheet.create({
   },
   analysisLabel: {
     fontSize: 15,
-    color: "#666",
+    color: "#000000",
     fontWeight: "500",
   },
   analysisValue: {
     fontSize: 15,
-    color: "#000",
+    color: "#000000",
     fontWeight: "600",
   },
   divider: {
     height: 1,
     backgroundColor: "#e0e0e0",
   },
-  menuContainer: {
-    marginTop: 30,
-    paddingHorizontal: 20,
-  },
-  menuItem: {
-    flexDirection: "row",
+  retakeButton: {
+    width: "100%",
+    backgroundColor: "#000000",
+    paddingVertical: 16,
+    borderRadius: 8,
     alignItems: "center",
-    backgroundColor: "#2a2a2a",
-    padding: 18,
-    borderRadius: 12,
-    marginBottom: 12,
+    justifyContent: "center",
   },
-  menuIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  menuText: {
-    flex: 1,
+  retakeButtonText: {
+    color: "#ffffff",
     fontSize: 16,
-    color: "#fff",
     fontWeight: "600",
   },
-  menuArrow: {
-    fontSize: 24,
-    color: "#999",
-  },
   logoutButton: {
-    marginHorizontal: 20,
-    marginTop: 20,
-    backgroundColor: "#2a2a2a",
-    paddingVertical: 16,
-    borderRadius: 12,
+    width: "100%",
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    paddingVertical: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#FF6B35",
+    borderColor: "#e0e0e0",
+    marginTop: 12,
+    gap: 8,
   },
-  logoutText: {
-    color: "#FF6B35",
+  logoutButtonText: {
+    color: "#000000",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
 });

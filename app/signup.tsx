@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,6 +15,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+const { width } = Dimensions.get("window");
 
 export default function SignUpScreen() {
   const router = useRouter();
@@ -58,12 +61,7 @@ export default function SignUpScreen() {
       await register(email, password);
 
       // Success! Navigate to main app
-      Alert.alert("Success", "Sign up successfully completed!", [
-        {
-          text: "OK",
-          onPress: () => router.replace("/(tabs)/profile"),
-        },
-      ]);
+      router.replace("/(tabs)/profile");
     } catch (error: any) {
       console.error("Sign up error:", error);
       Alert.alert(
@@ -80,149 +78,131 @@ export default function SignUpScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Back Button */}
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
+        {/* Top Label */}
+        <Text style={styles.topLabel}>Sign In/Up</Text>
 
-        <View style={styles.iconContainer}>
-          <View style={styles.iconCircle}>
-            <Text style={styles.iconEmoji}>🎨</Text>
-          </View>
-        </View>
+        {/* White Card */}
+        <View style={styles.card}>
+          {/* Title */}
+          <Text style={styles.title}>SIGN UP</Text>
 
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>Create Your Account</Text>
-          <Text style={styles.subtitle}>
-            Join StylerX and start connecting!
-          </Text>
-        </View>
-
-        {/* Email Input */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email address"
-            placeholderTextColor="#666"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            editable={!loading}
-          />
-        </View>
-
-        {/* Password Input */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Password</Text>
-          <View style={styles.passwordContainer}>
+          {/* Email Input */}
+          <View style={styles.inputWrapper}>
+            <Text style={styles.label}>EMAIL</Text>
             <TextInput
-              style={styles.passwordInput}
-              placeholder="Create a password (min 6 characters)"
-              placeholderTextColor="#666"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
+              style={styles.input}
+              placeholder="your@email.com"
+              placeholderTextColor="#999999"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
               autoCapitalize="none"
+              autoComplete="email"
               editable={!loading}
             />
+            <View style={styles.underline} />
+          </View>
+
+          {/* Password Input */}
+          <View style={styles.inputWrapper}>
+            <Text style={styles.label}>PASSWORD</Text>
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor="#999999"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
+                disabled={loading}
+              >
+                <Text style={styles.eyeIcon}>
+                  {showPassword ? "👁️" : "👁️‍🗨️"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.underline} />
+          </View>
+
+          {/* Confirm Password Input */}
+          <View style={styles.inputWrapper}>
+            <Text style={styles.label}>CONFIRM PASSWORD</Text>
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Confirm your password"
+                placeholderTextColor="#999999"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={styles.eyeButton}
+                disabled={loading}
+              >
+                <Text style={styles.eyeIcon}>
+                  {showConfirmPassword ? "👁️" : "👁️‍🗨️"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.underline} />
+          </View>
+
+          {/* Sign Up Button */}
+          <TouchableOpacity
+            style={[styles.signUpButton, loading && styles.signUpButtonDisabled]}
+            onPress={handleSignUp}
+            activeOpacity={0.8}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.signUpButtonText}>SIGN UP</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Login Link */}
+          <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>Already have an account? </Text>
             <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-              style={styles.eyeIcon}
+              onPress={() => router.push("/login")}
+              disabled={loading}
             >
-              <Text style={styles.eyeIconText}>
-                {showPassword ? "👁️" : "👁️‍🗨️"}
-              </Text>
+              <Text style={styles.loginLink}>Sign In</Text>
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Confirm Password Input */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Confirm Password</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Confirm your password"
-              placeholderTextColor="#666"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-              autoCapitalize="none"
-              editable={!loading}
-            />
-            <TouchableOpacity
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              style={styles.eyeIcon}
-            >
-              <Text style={styles.eyeIconText}>
-                {showConfirmPassword ? "👁️" : "👁️‍🗨️"}
-              </Text>
-            </TouchableOpacity>
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
           </View>
-        </View>
 
-        {/* Sign Up Button */}
-        <TouchableOpacity
-          style={[styles.signUpButton, loading && styles.signUpButtonDisabled]}
-          onPress={handleSignUp}
-          activeOpacity={0.8}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.signUpButtonText}>Create Account</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Login Link */}
-        <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.loginLink}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>Or continue with</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Social Login Buttons */}
-        <TouchableOpacity style={styles.kakaoButton} activeOpacity={0.8}>
-          <Text style={styles.kakaoButtonText}>💬 Continue with Kakao</Text>
-        </TouchableOpacity>
-
-        <View style={styles.socialButtonsRow}>
-          <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-            <Text style={styles.socialButtonText}>🔍 Google</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-            <Text style={styles.socialButtonText}>🍎 Apple</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Terms */}
-        <View style={styles.termsContainer}>
-          <Text style={styles.termsText}>
-            By signing up, you agree to our{" "}
-            <Text style={styles.termsLink}>Terms of Service</Text> and{" "}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
-          </Text>
+          {/* Terms */}
+          <View style={styles.termsContainer}>
+            <Text style={styles.termsText}>
+              By continuing, you agree to our{" "}
+              <Text style={styles.termsLink}>Terms of Service</Text> and{" "}
+              <Text style={styles.termsLink}>Privacy Policy</Text>
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -232,183 +212,137 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#E5E5E5",
   },
   scrollContent: {
-    paddingHorizontal: 30,
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 60,
     paddingBottom: 40,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#2a2a2a",
-    justifyContent: "center",
     alignItems: "center",
-    marginTop: 50,
+    justifyContent: "center",
+  },
+  topLabel: {
+    fontSize: 14,
+    color: "#999999",
+    alignSelf: "flex-start",
     marginBottom: 20,
+    marginLeft: 10,
   },
-  backButtonText: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "bold",
-  },
-  iconContainer: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  iconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "#FF6B35",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  iconEmoji: {
-    fontSize: 35,
-  },
-  titleContainer: {
-    alignItems: "center",
-    marginTop: 30,
-    marginBottom: 30,
+  card: {
+    width: width - 40,
+    maxWidth: 500,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 30,
   },
   title: {
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 8,
+    color: "#000000",
+    marginBottom: 40,
     textAlign: "center",
+    letterSpacing: 1,
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#999",
-    textAlign: "center",
+  inputWrapper: {
+    marginBottom: 30,
   },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 14,
-    color: "#fff",
+  label: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#000000",
     marginBottom: 8,
-    fontWeight: "500",
+    letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 16,
     fontSize: 16,
-    color: "#fff",
-    borderWidth: 1,
-    borderColor: "#3a3a3a",
+    color: "#000000",
+    paddingVertical: 8,
+    paddingHorizontal: 0,
   },
-  passwordContainer: {
+  passwordInputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#3a3a3a",
+    justifyContent: "space-between",
   },
   passwordInput: {
     flex: 1,
-    padding: 16,
     fontSize: 16,
-    color: "#fff",
+    color: "#000000",
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+  },
+  eyeButton: {
+    padding: 8,
   },
   eyeIcon: {
-    padding: 16,
-  },
-  eyeIconText: {
     fontSize: 18,
   },
+  underline: {
+    height: 1,
+    backgroundColor: "#000000",
+    marginTop: 4,
+  },
   signUpButton: {
-    backgroundColor: "#FF6B35",
-    borderRadius: 25,
+    backgroundColor: "#000000",
+    borderRadius: 8,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 10,
+    marginBottom: 24,
   },
   signUpButtonDisabled: {
     opacity: 0.6,
   },
   signUpButtonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
+    letterSpacing: 1,
   },
   loginContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: 20,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   loginText: {
-    color: "#999",
     fontSize: 14,
+    color: "#666666",
   },
   loginLink: {
-    color: "#FF6B35",
     fontSize: 14,
-    fontWeight: "bold",
+    color: "#000000",
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
   divider: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 20,
+    marginBottom: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#E5E5E5",
   },
   dividerText: {
     marginHorizontal: 15,
-    color: "#666",
+    color: "#666666",
     fontSize: 12,
-  },
-  kakaoButton: {
-    backgroundColor: "#FEE500",
-    borderRadius: 25,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  kakaoButtonText: {
-    color: "#000",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  socialButtonsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  socialButton: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 25,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  socialButtonText: {
-    color: "#000",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "500",
   },
   termsContainer: {
-    marginTop: 30,
+    marginTop: 20,
     alignItems: "center",
   },
   termsText: {
     fontSize: 11,
-    color: "#666",
+    color: "#999999",
     textAlign: "center",
     lineHeight: 16,
   },
   termsLink: {
-    color: "#FF6B35",
+    color: "#000000",
     textDecorationLine: "underline",
   },
 });
