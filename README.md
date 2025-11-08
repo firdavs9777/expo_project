@@ -4,11 +4,16 @@ A React Native app built with Expo that helps users discover their personal colo
 
 ## Screenshots
 
-### Before
-![Before](./before.PNG)
-
-### After
-![After](./after.PNG)
+<table>
+  <tr>
+    <td><strong>Before</strong></td>
+    <td><strong>After</strong></td>
+  </tr>
+  <tr>
+    <td><img src="./before.PNG" width="400" alt="Before" /></td>
+    <td><img src="./after.PNG" width="400" alt="After" /></td>
+  </tr>
+</table>
 
 ## Features
 
