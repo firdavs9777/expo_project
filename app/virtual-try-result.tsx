@@ -99,39 +99,6 @@ export default function VirtualResult() {
   //     }
   //   };
 
-  // Save to favorites/liked items
-  const saveToFavorites = async () => {
-    if (!user?.access_token) {
-      Alert.alert("Error", "Please log in to save favorites.");
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        "https://stylist-ai-be.onrender.com/api/user/outfits/like",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${user.access_token}`,
-          },
-          body: JSON.stringify({
-            item_id: outfitId,
-            result_image_url: resultImageUri,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        Alert.alert("Saved!", "Added to your favorites.");
-      } else {
-        throw new Error("Failed to save");
-      }
-    } catch (error) {
-      console.error("Save error:", error);
-      Alert.alert("Error", "Failed to save to favorites.");
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -141,15 +108,10 @@ export default function VirtualResult() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
+          <Ionicons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Your Try-On</Text>
-        <TouchableOpacity
-          style={styles.shareButton}
-          //  onPress={shareImage}
-        >
-          <Ionicons name="share-outline" size={24} color="#FFF" />
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -159,7 +121,7 @@ export default function VirtualResult() {
       >
         {/* Success Badge */}
         <View style={styles.successBadge}>
-          <Ionicons name="checkmark-circle" size={32} color="#4CAF50" />
+          <Ionicons name="checkmark-circle" size={32} color="#000000" />
           <Text style={styles.successText}>Virtual Try-On Complete!</Text>
         </View>
 
@@ -198,19 +160,11 @@ export default function VirtualResult() {
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={saveToFavorites}
-          >
-            <Ionicons name="heart" size={24} color="#FFF" />
-            <Text style={styles.actionButtonText}>Save to Favorites</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryButton]}
             onPress={saveToGallery}
             disabled={isSaving}
           >
-            <Ionicons name="download" size={24} color="#FF6B35" />
-            <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>
+            <Ionicons name="download" size={24} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>
               {isSaving ? "Saving..." : "Save to Gallery"}
             </Text>
           </TouchableOpacity>
@@ -221,7 +175,7 @@ export default function VirtualResult() {
           style={styles.tryAgainButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="refresh" size={20} color="#999" />
+          <Ionicons name="refresh" size={20} color="#000000" />
           <Text style={styles.tryAgainButtonText}>Try Another Photo</Text>
         </TouchableOpacity>
 
@@ -230,7 +184,7 @@ export default function VirtualResult() {
           style={styles.browseButton}
           onPress={() => {
             // Navigate back to outfit swipe deck
-            router.push("/(tabs)/profile");
+            router.push("/(tabs)/outfit-swipe");
           }}
         >
           <Text style={styles.browseButtonText}>Browse More Outfits</Text>
@@ -243,7 +197,7 @@ export default function VirtualResult() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#ffffff",
   },
   header: {
     flexDirection: "row",
@@ -252,30 +206,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: "#3a3a3a",
+    borderBottomColor: "#e0e0e0",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#3a3a3a",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  shareButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#f5f5f5",
     justifyContent: "center",
     alignItems: "center",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#FFF",
+    color: "#000000",
   },
   scrollView: {
     flex: 1,
@@ -288,39 +234,55 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(76, 175, 80, 0.1)",
+    backgroundColor: "#f5f5f5",
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
     gap: 12,
     borderWidth: 1,
-    borderColor: "rgba(76, 175, 80, 0.3)",
+    borderColor: "#e0e0e0",
   },
   successText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#4CAF50",
+    color: "#000000",
   },
   resultSection: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     overflow: "hidden",
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#3a3a3a",
+    borderColor: "#e0e0e0",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   resultImage: {
     width: "100%",
     height: 500,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#f5f5f5",
   },
   outfitInfo: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#3a3a3a",
+    borderColor: "#e0e0e0",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   outfitHeader: {
     flexDirection: "row",
@@ -330,7 +292,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 8,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#f5f5f5",
   },
   outfitDetails: {
     flex: 1,
@@ -339,25 +301,25 @@ const styles = StyleSheet.create({
   outfitName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FFF",
+    color: "#000000",
     marginBottom: 4,
   },
   outfitPrice: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FF6B35",
+    color: "#000000",
     marginBottom: 4,
   },
   outfitColor: {
     fontSize: 14,
-    color: "#999",
+    color: "#666666",
   },
   actionsContainer: {
     gap: 12,
     marginBottom: 20,
   },
   actionButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#000000",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -366,20 +328,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButtonText: {
-    color: "#FFF",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
-  secondaryButton: {
-    backgroundColor: "#2a2a2a",
-    borderWidth: 2,
-    borderColor: "#FF6B35",
-  },
-  secondaryButtonText: {
-    color: "#FF6B35",
-  },
   tryAgainButton: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ffffff",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -387,9 +341,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
     marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: "#000000",
   },
   tryAgainButtonText: {
-    color: "#999",
+    color: "#000000",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -399,7 +355,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   browseButtonText: {
-    color: "#999",
+    color: "#666666",
     fontSize: 14,
     fontWeight: "600",
     textDecorationLine: "underline",

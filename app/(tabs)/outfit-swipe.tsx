@@ -49,7 +49,7 @@ export default function OutfitSwipeDeck() {
 
   // Get color type from params or use default
   const personalColorType =
-    (params.personalColorType as string) || "Deep Autumn";
+    (params.personalColorType as string) || "Deep Winter";
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedItems, setLikedItems] = useState<number[]>([]);
@@ -95,6 +95,7 @@ export default function OutfitSwipeDeck() {
   ) => {
     // Prevent concurrent requests
     if (isFetchingRef.current && !retry) {
+      console.log("Skipping fetch - already fetching");
       return;
     }
 
@@ -166,19 +167,13 @@ export default function OutfitSwipeDeck() {
       );
 
       if (data.length === 0) {
-        // This subcategory has no items, try next one
-        const nextSubCategoryIndex = subCategoryIndex + 1;
-        if (nextSubCategoryIndex < apiCategories.length) {
-          setCurrentSubCategoryIndex(nextSubCategoryIndex);
-          isFetchingRef.current = false;
-          fetchOutfitItems(category, nextSubCategoryIndex, false);
-          return;
-        } else {
-          // No more subcategories
-          setHasMoreItems(false);
-          setOutfitItems([]);
-          setAllFetchedItems([]);
-        }
+        // This subcategory has no items - don't auto-fetch next one
+        // Just show empty state, user can change category manually
+        setHasMoreItems(false);
+        setOutfitItems([]);
+        setAllFetchedItems([]);
+        setCurrentSubCategoryIndex(subCategoryIndex);
+        setCurrentIndex(0);
       } else {
         // Store all fetched items and show first batch
         setAllFetchedItems(data);
@@ -216,28 +211,60 @@ export default function OutfitSwipeDeck() {
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        // Stop any ongoing animations when starting a new gesture
+        position.stopAnimation();
+      },
       onPanResponderMove: (_, gesture) => {
         position.setValue({ x: gesture.dx, y: gesture.dy });
       },
       onPanResponderRelease: (_, gesture) => {
-        if (gesture.dx > SWIPE_THRESHOLD) {
+        // Log gesture values for debugging
+        console.log("Gesture release:", {
+          dx: gesture.dx,
+          vx: gesture.vx,
+          threshold: SWIPE_THRESHOLD,
+        });
+        
+        // Determine swipe direction based on distance and velocity
+        // Use distance as primary, velocity as secondary
+        const swipeRight = gesture.dx > SWIPE_THRESHOLD || (gesture.dx > 50 && gesture.vx > 0.3);
+        const swipeLeft = gesture.dx < -SWIPE_THRESHOLD || (gesture.dx < -50 && gesture.vx < -0.3);
+        
+        if (swipeRight) {
+          // Swipe right (like)
+          console.log("Swipe right detected");
           forceSwipe("right");
-        } else if (gesture.dx < -SWIPE_THRESHOLD) {
+        } else if (swipeLeft) {
+          // Swipe left (dislike)
+          console.log("Swipe left detected");
           forceSwipe("left");
         } else {
+          // Not enough movement, reset to center
+          console.log("Insufficient swipe, resetting");
           resetPosition();
         }
+      },
+      onPanResponderTerminate: () => {
+        // Reset position if gesture is interrupted
+        resetPosition();
       },
     })
   ).current;
 
   const forceSwipe = (direction: "left" | "right") => {
+    const item = outfitItems[currentIndex];
+    if (!item) return; // Don't swipe if no item
+    
     const x = direction === "right" ? width + 100 : -width - 100;
     Animated.timing(position, {
       toValue: { x, y: 0 },
       duration: 250,
       useNativeDriver: false,
-    }).start(() => onSwipeComplete(direction));
+    }).start(() => {
+      onSwipeComplete(direction);
+    });
   };
 
   // Load next batch from allFetchedItems when needed
@@ -261,87 +288,90 @@ export default function OutfitSwipeDeck() {
   const onSwipeComplete = async (direction: "left" | "right") => {
     const item = outfitItems[currentIndex];
 
+    // Handle like (swipe right)
     if (direction === "right" && item) {
       setLikedItems([...likedItems, item.ID]);
 
-      // Save like to backend using authenticated endpoint
+      // Save like to backend using authenticated endpoint (don't await - do in background)
       if (user?.access_token) {
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/user/outfits/like`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-                Authorization: `Bearer ${user.access_token}`,
-              },
-              body: JSON.stringify({
-                item_id: item.ID.toString(),
-              }),
-            }
-          );
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(
-              errorData.detail || `Failed to like outfit: ${response.status}`
-            );
+        fetch(
+          `${API_BASE_URL}/api/user/outfits/like`,
+          {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: `Bearer ${user.access_token}`,
+          },
+          body: JSON.stringify({
+              item_id: item.ID.toString(),
+            }),
           }
-
-          const likedOutfit = await response.json();
-          console.log("Outfit liked successfully:", likedOutfit);
-        } catch (error) {
-          console.error("Error saving like to backend:", error);
-          // Don't throw - allow the like to still work locally
-        }
+        )
+          .then(async (response) => {
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              const errorMessage = errorData.detail || `Failed to like outfit: ${response.status}`;
+              
+              // Handle "already liked" case gracefully - don't treat it as an error
+              if (errorMessage.includes("already liked") || errorMessage.includes("Already liked")) {
+                console.log("Outfit already liked:", item.ID);
+                return;
+              }
+              
+              // For other errors, log but don't throw to avoid breaking the UI
+              console.warn("Error saving like to backend:", errorMessage);
+              return;
+            }
+            const likedOutfit = await response.json();
+            console.log("Outfit liked successfully:", likedOutfit);
+          })
+          .catch((error) => {
+            // Only log unexpected errors, don't break the UI
+            console.warn("Error saving like to backend:", error.message || error);
+          });
       }
+    }
+
+    // Handle dislike (swipe left) - just log for now, no API call needed
+    if (direction === "left" && item) {
+      console.log("Outfit disliked:", item.ID);
     }
 
     const nextIndex = currentIndex + 1;
+    waitingForItemsRef.current = false;
 
-    // Preload next batch when 3 items remaining
-    if (
-      nextIndex >= outfitItems.length - 3 &&
-      hasMoreItems &&
-      allFetchedItems.length > outfitItems.length
-    ) {
-      loadNextBatch();
-    }
-
-    // Check if we've reached the end of current items
-    if (nextIndex >= outfitItems.length) {
-      // Try to load next batch from cached items
-      if (allFetchedItems.length > outfitItems.length) {
-        const loaded = loadNextBatch();
-        if (loaded) {
-          // New batch loaded, advance to next index
-          position.setValue({ x: 0, y: 0 });
-          setCurrentIndex(nextIndex);
-          return;
-        }
-      }
-
-      // No more items in current subcategory, try next one
-      if (hasMoreItems) {
-        const apiCategories = CATEGORY_MAP[selectedCategory];
-        const nextSubCategoryIndex = currentSubCategoryIndex + 1;
-        if (nextSubCategoryIndex < apiCategories.length) {
-          // Load next subcategory
-          setCurrentSubCategoryIndex(nextSubCategoryIndex);
-          fetchOutfitItems(selectedCategory, nextSubCategoryIndex, false);
-          position.setValue({ x: 0, y: 0 });
-          return;
-        }
-      }
-
-      // No more items available
-      waitingForItemsRef.current = false;
+    // Check if we have more items in the current list
+    if (nextIndex < outfitItems.length) {
+      // Reset position for the next card BEFORE updating index
       position.setValue({ x: 0, y: 0 });
+      setCurrentIndex(nextIndex);
+      
+      // Preload next batch when 3 items remaining (background load, don't block)
+      if (
+        nextIndex >= outfitItems.length - 3 &&
+        hasMoreItems &&
+        allFetchedItems.length > outfitItems.length
+      ) {
+        loadNextBatch();
+      }
       return;
     }
 
-    waitingForItemsRef.current = false;
+    // We've reached the end of current items
+    // First, try to load from cached items (already fetched but not shown)
+    if (allFetchedItems.length > outfitItems.length) {
+      const loaded = loadNextBatch();
+      if (loaded) {
+        // New batch loaded, reset position and advance to next index
+        position.setValue({ x: 0, y: 0 });
+        setCurrentIndex(nextIndex);
+        return;
+      }
+    }
+
+    // No more items available in current subcategory
+    // Reset position and show empty state
     position.setValue({ x: 0, y: 0 });
     setCurrentIndex(nextIndex);
   };
@@ -354,11 +384,15 @@ export default function OutfitSwipeDeck() {
   };
 
   const handleLike = () => {
-    forceSwipe("right");
+    if (outfitItems[currentIndex]) {
+      forceSwipe("right");
+    }
   };
 
   const handleNope = () => {
-    forceSwipe("left");
+    if (outfitItems[currentIndex]) {
+      forceSwipe("left");
+    }
   };
 
   const handleCategoryChange = (category: "Top" | "Bottom" | "Shoes") => {
@@ -372,7 +406,7 @@ export default function OutfitSwipeDeck() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B35" />
+          <ActivityIndicator size="large" color="#000000" />
           <Text style={styles.loadingText}>
             Loading {selectedCategory} items...
           </Text>
@@ -420,7 +454,7 @@ export default function OutfitSwipeDeck() {
       return (
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FF6B35" />
+            <ActivityIndicator size="large" color="#000000" />
             <Text style={styles.loadingText}>Loading items...</Text>
           </View>
         </SafeAreaView>
@@ -459,7 +493,7 @@ export default function OutfitSwipeDeck() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B35" />
+          <ActivityIndicator size="large" color="#000000" />
           <Text style={styles.loadingText}>Loading items...</Text>
         </View>
       </SafeAreaView>
@@ -468,13 +502,11 @@ export default function OutfitSwipeDeck() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>{personalColorType}</Text>
-        </View>
+      <Text style={styles.headerTitle}>{personalColorType}</Text>
       </View>
 
       {/* Category Tabs */}
@@ -526,6 +558,7 @@ export default function OutfitSwipeDeck() {
       {/* Card Stack */}
       <View style={styles.cardContainer}>
         <Animated.View
+          key={`card-${currentItem.ID}-${currentIndex}`}
           style={[
             styles.card,
             {
@@ -536,7 +569,6 @@ export default function OutfitSwipeDeck() {
               ],
             },
           ]}
-          {...panResponder.panHandlers}
         >
           {/* Like/Nope Labels */}
           <Animated.View style={[styles.likeLabel, { opacity: likeOpacity }]}>
@@ -555,13 +587,15 @@ export default function OutfitSwipeDeck() {
             />
           </View>
 
-          {/* Item Info */}
-          <View style={styles.itemInfo}>
+          {/* Item Info Overlay */}
+          <View style={styles.itemInfoOverlay}>
             <Text style={styles.itemName} numberOfLines={2}>
               {currentItem.Description}
             </Text>
-            <Text style={styles.itemPrice}>{currentItem.Price}</Text>
-            <Text style={styles.itemBrand}>{currentItem.ColorName}</Text>
+            <View style={styles.itemInfoRow}>
+              <Text style={styles.itemBrand}>{currentItem.ColorName || ""}</Text>
+              <Text style={styles.itemPrice}>{currentItem.Price}</Text>
+            </View>
           </View>
 
         </Animated.View>
@@ -577,7 +611,7 @@ export default function OutfitSwipeDeck() {
           style={[styles.actionButton, styles.likeButton]}
           onPress={handleLike}
         >
-          <Text style={styles.likeIcon}>❤️</Text>
+          <Text style={styles.likeIcon}>♡</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -587,13 +621,13 @@ export default function OutfitSwipeDeck() {
               pathname: "/virtual-try",
               params: {
                 outfitId: currentItem.ID,
-                outfitImageUrl: currentItem.imageUrl, // Pass the outfit image URL
+                outfitImageUrl: currentItem.imageUrl,
                 outfitName: currentItem.ColorName || "Selected Outfit",
               },
             });
           }}
         >
-          <Text style={styles.actionIcon}>ℹ️</Text>
+          <Text style={styles.hangerIcon}>⌗</Text>
         </TouchableOpacity>
       </View>
       {/* Progress Indicator */}
@@ -609,62 +643,65 @@ export default function OutfitSwipeDeck() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#f5f5f5",
   },
   header: {
-    paddingTop: 10,
-    paddingHorizontal: 30,
-    paddingBottom: 15,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
-    color: "#fff",
-    textAlign: "center",
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: "#999",
-    marginTop: 4,
+    color: "#000000",
     textAlign: "center",
   },
   tabsContainer: {
     flexDirection: "row",
-    paddingHorizontal: 30,
-    gap: 10,
+    paddingHorizontal: 20,
+    gap: 8,
     marginBottom: 20,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: "#2a2a2a",
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#e0e0e0",
     alignItems: "center",
   },
   tabActive: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#000000",
   },
   tabText: {
     fontSize: 14,
-    color: "#999",
+    color: "#000000",
     fontWeight: "600",
   },
   tabTextActive: {
-    color: "#fff",
+    color: "#ffffff",
   },
   cardContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 20,
   },
   card: {
     width: width * 0.85,
-    height: height * 0.55,
-    backgroundColor: "#2a2a2a",
-    borderRadius: 20,
+    height: height * 0.5,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
     overflow: "hidden",
     position: "relative",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   likeLabel: {
     position: "absolute",
@@ -672,15 +709,16 @@ const styles = StyleSheet.create({
     right: 40,
     zIndex: 1000,
     borderWidth: 4,
-    borderColor: "#4CAF50",
+    borderColor: "#000000",
     borderRadius: 10,
     padding: 10,
     transform: [{ rotate: "15deg" }],
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
   },
   likeText: {
     fontSize: 32,
     fontWeight: "bold",
-    color: "#4CAF50",
+    color: "#000000",
   },
   nopeLabel: {
     position: "absolute",
@@ -688,96 +726,98 @@ const styles = StyleSheet.create({
     left: 40,
     zIndex: 1000,
     borderWidth: 4,
-    borderColor: "#FF5252",
+    borderColor: "#000000",
     borderRadius: 10,
     padding: 10,
     transform: [{ rotate: "-15deg" }],
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
   },
   nopeText: {
     fontSize: 32,
     fontWeight: "bold",
-    color: "#FF5252",
+    color: "#000000",
   },
   imageContainer: {
     width: "100%",
-    height: "70%",
-    backgroundColor: "#3a3a3a",
+    height: "75%",
+    backgroundColor: "#f5f5f5",
   },
   itemImage: {
     width: "100%",
     height: "100%",
   },
-  itemInfo: {
-    padding: 20,
+  itemInfoOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 4,
+    color: "#000000",
+    marginBottom: 8,
+  },
+  itemInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
   },
   itemPrice: {
     fontSize: 16,
-    color: "#FF6B35",
+    color: "#000000",
     fontWeight: "600",
-    marginBottom: 4,
   },
   itemBrand: {
-    fontSize: 13,
-    color: "#999",
-  },
-  tryOnBadge: {
-    position: "absolute",
-    bottom: 100,
-    left: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  tryOnText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 14,
+    color: "#666666",
   },
   actionsContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 20,
-    paddingVertical: 20,
-    paddingBottom: 10,
+    gap: 24,
+    paddingVertical: 24,
+    paddingBottom: 16,
   },
   actionButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#2a2a2a",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#3a3a3a",
+    borderWidth: 1.5,
+    borderColor: "#000000",
   },
   likeButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "#FF6B35",
-    borderColor: "#FF6B35",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#000000",
+    borderColor: "#000000",
   },
   actionIcon: {
     fontSize: 24,
+    color: "#000000",
   },
   likeIcon: {
-    fontSize: 32,
+    fontSize: 28,
+    color: "#ffffff",
+  },
+  hangerIcon: {
+    fontSize: 24,
+    color: "#000000",
   },
   progressContainer: {
     alignItems: "center",
-    paddingBottom: 10,
+    paddingBottom: 16,
   },
   progressText: {
-    color: "#999",
+    color: "#666666",
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   loadingContainer: {
     flex: 1,
@@ -785,7 +825,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    color: "#fff",
+    color: "#000000",
     fontSize: 16,
     marginTop: 16,
   },
@@ -796,21 +836,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   errorText: {
-    color: "#fff",
+    color: "#000000",
     fontSize: 16,
     textAlign: "center",
     marginBottom: 20,
   },
   retryButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#000000",
     paddingHorizontal: 30,
     paddingVertical: 12,
-    borderRadius: 25,
+    borderRadius: 8,
   },
   retryButtonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
   emptyContainer: {
     flex: 1,
@@ -821,24 +861,24 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#fff",
+    color: "#000000",
     marginBottom: 10,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: "#999",
+    color: "#666666",
     textAlign: "center",
     marginBottom: 30,
   },
   resetButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#000000",
     paddingHorizontal: 40,
     paddingVertical: 15,
-    borderRadius: 25,
+    borderRadius: 8,
   },
   resetButtonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
 });

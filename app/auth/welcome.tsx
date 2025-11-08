@@ -25,29 +25,44 @@ export default function WelcomeTermsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Decorative dot */}
-        <View style={styles.decorativeDot} />
+      {/* Header Text */}
+      <Text style={styles.headerText}>Welcome</Text>
 
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>Welcome to</Text>
-          <Text style={styles.appName}>ColorMe!</Text>
+      {/* Main Card */}
+      <View style={styles.card}>
+        {/* Logo */}
+        <Text style={styles.logo}>StyleX</Text>
+
+        {/* Instruction Text */}
+        <Text style={styles.instructionText}>Choose your language.</Text>
+
+        {/* Language Selection Buttons */}
+        <View style={styles.buttonsContainer}>
+          <TouchableOpacity
+            style={styles.languageButton}
+            onPress={() => {
+              // Handle English selection
+              setAgreedToTerms(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.languageButtonText}>ENGLISH</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.languageButton}
+            onPress={() => {
+              // Handle Korean selection
+              setAgreedToTerms(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.languageButtonText}>한국어</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Description */}
-        <Text style={styles.description}>
-          To get started, please review and agree to our policies. Your data
-          helps us provide personalized color analysis and outfit suggestions,
-          and we are committed to handling it securely.
-        </Text>
-
-        {/* Checkbox Section */}
-        <View style={styles.checkboxContainer}>
-          {/* Required Agreement */}
+        {/* Terms Section */}
+        <View style={styles.termsContainer}>
           <TouchableOpacity
             style={styles.checkboxRow}
             onPress={() => setAgreedToTerms(!agreedToTerms)}
@@ -58,15 +73,12 @@ export default function WelcomeTermsScreen() {
             >
               {agreedToTerms && <Text style={styles.checkmark}>✓</Text>}
             </View>
-            <View style={styles.checkboxTextContainer}>
-              <Text style={styles.checkboxText}>
-                I agree to the <Text style={styles.link}>Privacy Policy</Text> &{" "}
-                <Text style={styles.link}>Terms of Service</Text> (Required)
-              </Text>
-            </View>
+            <Text style={styles.checkboxText}>
+              I agree to the <Text style={styles.link}>Privacy Policy</Text> &{" "}
+              <Text style={styles.link}>Terms of Service</Text>
+            </Text>
           </TouchableOpacity>
 
-          {/* Optional Agreement */}
           <TouchableOpacity
             style={styles.checkboxRow}
             onPress={() => setAgreedToPromotions(!agreedToPromotions)}
@@ -80,17 +92,13 @@ export default function WelcomeTermsScreen() {
             >
               {agreedToPromotions && <Text style={styles.checkmark}>✓</Text>}
             </View>
-            <View style={styles.checkboxTextContainer}>
-              <Text style={styles.checkboxText}>
-                I agree to receive promotional notifications (Optional)
-              </Text>
-            </View>
+            <Text style={styles.checkboxText}>
+              I agree to receive promotional notifications (Optional)
+            </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
 
-      {/* Continue Button - Fixed at bottom */}
-      <View style={styles.buttonContainer}>
+        {/* Continue Button */}
         <TouchableOpacity
           style={[
             styles.continueButton,
@@ -100,7 +108,7 @@ export default function WelcomeTermsScreen() {
           disabled={!agreedToTerms}
           activeOpacity={0.8}
         >
-          <Text style={styles.continueButtonText}>Agree and Continue →</Text>
+          <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -110,112 +118,131 @@ export default function WelcomeTermsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#f5f5f5",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
   },
-  scrollContent: {
-    paddingHorizontal: 30,
-    paddingTop: 60,
-    paddingBottom: 120,
+  headerText: {
+    position: "absolute",
+    top: 60,
+    left: 30,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#666666",
   },
-  decorativeDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#FF6B35",
-    alignSelf: "flex-end",
-    marginBottom: 40,
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 32,
+    width: "100%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  titleContainer: {
-    marginBottom: 20,
+  logo: {
+    fontSize: 48,
+    fontWeight: "400",
+    color: "#000000",
+    letterSpacing: 8,
+    marginBottom: 24,
+    fontFamily: "serif",
   },
-  title: {
-    fontSize: 32,
-    fontWeight: "300",
-    color: "#333",
+  instructionText: {
+    fontSize: 14,
+    color: "#666666",
+    marginBottom: 32,
+    fontWeight: "400",
   },
-  appName: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#333",
+  buttonsContainer: {
+    width: "100%",
+    gap: 16,
+    marginBottom: 32,
   },
-  description: {
-    fontSize: 15,
-    color: "#666",
-    lineHeight: 22,
-    marginBottom: 40,
+  languageButton: {
+    width: "100%",
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#000000",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  checkboxContainer: {
-    gap: 20,
+  languageButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000000",
+    letterSpacing: 1,
+  },
+  termsContainer: {
+    width: "100%",
+    gap: 16,
+    marginBottom: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
   },
   checkboxRow: {
     flexDirection: "row",
     alignItems: "flex-start",
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#ddd",
-    backgroundColor: "#fff",
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: "#000000",
+    backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
     marginTop: 2,
   },
   checkboxChecked: {
-    backgroundColor: "#FF6B35",
-    borderColor: "#FF6B35",
+    backgroundColor: "#000000",
+    borderColor: "#000000",
   },
   checkmark: {
-    color: "#fff",
-    fontSize: 16,
+    color: "#ffffff",
+    fontSize: 12,
     fontWeight: "bold",
-  },
-  checkboxTextContainer: {
-    flex: 1,
   },
   checkboxText: {
-    fontSize: 14,
-    color: "#333",
+    fontSize: 13,
+    color: "#000000",
     lineHeight: 20,
+    flex: 1,
   },
   link: {
-    color: "#FF6B35",
+    color: "#000000",
     textDecorationLine: "underline",
-  },
-  buttonContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 30,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    fontWeight: "600",
   },
   continueButton: {
-    backgroundColor: "#FF6B35",
-    borderRadius: 30,
-    paddingVertical: 18,
+    width: "100%",
+    backgroundColor: "#000000",
+    borderRadius: 8,
+    paddingVertical: 16,
     alignItems: "center",
-    shadowColor: "#FF6B35",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    justifyContent: "center",
   },
   continueButtonDisabled: {
-    backgroundColor: "#ddd",
-    shadowOpacity: 0,
-    elevation: 0,
+    backgroundColor: "#e0e0e0",
+    opacity: 0.5,
   },
   continueButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
 });

@@ -1,7 +1,8 @@
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Linking,
@@ -14,11 +15,14 @@ import {
 } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
 import { type LikedItem } from "@/utils/likedItemsStorage";
+import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
 
 const API_BASE_URL = "https://stylist-ai-be.onrender.com";
 
 export default function WardrobeScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [topItems, setTopItems] = useState<LikedItem[]>([]);
   const [bottomItems, setBottomItems] = useState<LikedItem[]>([]);
   const [shoesItems, setShoesItems] = useState<LikedItem[]>([]);
@@ -196,39 +200,241 @@ export default function WardrobeScreen() {
     }
   };
 
+  // Request camera/gallery permissions
+  const requestPermissions = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Needed",
+        "Please grant camera roll permissions to upload photos."
+      );
+      return false;
+    }
+    return true;
+  };
+
+  // Pick image from gallery
+  const pickImage = async (): Promise<string | null> => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return null;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [3, 4],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      return result.assets[0].uri;
+    }
+    return null;
+  };
+
+  // Take photo with camera
+  const takePhoto = async (): Promise<string | null> => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Needed",
+        "Please grant camera permissions to take photos."
+      );
+      return null;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [3, 4],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      return result.assets[0].uri;
+    }
+    return null;
+  };
+
+  // Show photo selection options
+  const selectPhotoOption = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      Alert.alert("Upload Your Photo", "Choose an option", [
+        {
+          text: "Take Photo",
+          onPress: async () => {
+            const uri = await takePhoto();
+            resolve(uri);
+          },
+        },
+        {
+          text: "Choose from Gallery",
+          onPress: async () => {
+            const uri = await pickImage();
+            resolve(uri);
+          },
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => resolve(null),
+        },
+      ]);
+    });
+  };
+
+  // Convert image URL to base64 data URI
+  const convertImageToBase64 = async (imageUrl: string): Promise<string> => {
+    try {
+      // Download the image first
+      const imageUri = `${FileSystem.cacheDirectory}outfit_image_${Date.now()}.jpg`;
+      const downloadResult = await FileSystem.downloadAsync(imageUrl, imageUri);
+      
+      if (downloadResult.status !== 200) {
+        throw new Error(`Failed to download image: ${downloadResult.status}`);
+      }
+      
+      // Read as base64
+      const imageBase64 = await FileSystem.readAsStringAsync(downloadResult.uri, {
+        encoding: 'base64' as any,
+      });
+      
+      if (!imageBase64 || typeof imageBase64 !== 'string' || imageBase64.length === 0) {
+        throw new Error("Image base64 conversion returned empty or invalid result");
+      }
+      
+      // Determine image format from URL
+      const imageFormat = imageUrl.toLowerCase().includes('.png') ? 'png' : 'jpeg';
+      return `data:image/${imageFormat};base64,${imageBase64}`;
+    } catch (error) {
+      console.error("Error converting image to base64:", error);
+      throw new Error(`Failed to convert image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Convert user photo to base64
+  const convertUserPhotoToBase64 = async (photoUri: string): Promise<string> => {
+    try {
+      const userImageBase64 = await FileSystem.readAsStringAsync(photoUri, {
+        encoding: 'base64' as any,
+      });
+      
+      if (!userImageBase64 || typeof userImageBase64 !== 'string' || userImageBase64.length === 0) {
+        throw new Error("User image base64 conversion returned empty or invalid result");
+      }
+      
+      // Determine image format from URI
+      const userImageFormat = photoUri.toLowerCase().includes('.png') ? 'png' : 'jpeg';
+      return `data:image/${userImageFormat};base64,${userImageBase64}`;
+    } catch (error) {
+      console.error("Error converting user photo to base64:", error);
+      throw new Error(`Failed to convert user photo: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const handleVirtualTryOn = async () => {
     if (!selectedTop || !selectedBottom || !selectedShoes) {
+      Alert.alert("Selection Required", "Please select one item from each category.");
       return;
     }
 
     try {
       setSendingTryOn(true);
-      const outfit = {
-        top: selectedTop,
-        bottom: selectedBottom,
-        shoes: selectedShoes,
-      };
 
-      const response = await fetch(`${API_BASE_URL}/api/virtual-try-on`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(outfit),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to send try-on request: ${response.status}`);
+      // First, get user photo
+      const userPhotoUri = await selectPhotoOption();
+      if (!userPhotoUri) {
+        setSendingTryOn(false);
+        return; // User cancelled
       }
 
-      const data = await response.json();
-      console.log("Virtual try-on response:", data);
-      
-      // You can handle the response here (e.g., show success message, navigate to try-on screen)
-      alert("Virtual try-on request sent successfully!");
+      // Convert all images to base64
+      console.log("Converting images to base64...");
+      const [userImage, upperImage, lowerImage, shoesImage] = await Promise.all([
+        convertUserPhotoToBase64(userPhotoUri),
+        convertImageToBase64(selectedTop.imageUrl),
+        convertImageToBase64(selectedBottom.imageUrl),
+        convertImageToBase64(selectedShoes.imageUrl),
+      ]);
+
+      console.log("Sending full outfit try-on request...");
+      const response = await fetch(
+        `${API_BASE_URL}/api/try-on/generate-full-outfit`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            user_image: userImage,
+            upper_image: upperImage,
+            lower_image: lowerImage,
+            shoes_image: shoesImage,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(`Failed to generate try-on: ${response.status} - ${errorText}`);
+      }
+
+      const contentType = response.headers.get("content-type");
+      let resultImage: string;
+
+      if (contentType?.includes("application/json")) {
+        const data = await response.json();
+        console.log("=== Full Outfit API Response ===");
+        console.log("Response keys:", Object.keys(data));
+        console.log("Full response:", JSON.stringify(data, null, 2));
+        
+        // Try multiple possible field names for the result image
+        resultImage = data.try_on_full_outfit_image || data.try_on_image || data.image || data.result_image || data.result || data.data;
+        
+        if (!resultImage) {
+          console.error("No image field found in response. Available keys:", Object.keys(data));
+          throw new Error("API response does not contain image data. Available fields: " + Object.keys(data).join(", "));
+        }
+        
+        // Ensure resultImage is a valid data URI
+        if (!resultImage.startsWith("data:")) {
+          resultImage = `data:image/png;base64,${resultImage}`;
+        }
+      } else {
+        // Handle image/blob response - read as base64
+        const responseText = await response.text();
+        if (responseText && responseText.length > 0) {
+          // If it's already a data URI, use it directly
+          if (responseText.startsWith("data:")) {
+            resultImage = responseText;
+          } else {
+            // Otherwise, assume it's base64 and add the prefix
+            resultImage = `data:image/png;base64,${responseText}`;
+          }
+        } else {
+          throw new Error("Empty response from API");
+        }
+      }
+
+      // Navigate to result screen
+      router.push({
+        pathname: "/virtual-try-result",
+        params: {
+          resultImageUri: resultImage,
+          outfitImageUrl: selectedTop.imageUrl,
+          outfitName: `${selectedTop.Description} + ${selectedBottom.Description} + ${selectedShoes.Description}`,
+          outfitPrice: `${selectedTop.Price} + ${selectedBottom.Price} + ${selectedShoes.Price}`,
+          outfitColor: "Full Outfit",
+          outfitId: `${selectedTop.ID}-${selectedBottom.ID}-${selectedShoes.ID}`,
+        },
+      });
     } catch (error) {
       console.error("Error sending virtual try-on:", error);
-      alert("Failed to send virtual try-on request. Please try again.");
+      Alert.alert(
+        "Error",
+        error instanceof Error
+          ? error.message
+          : "Failed to process virtual try-on. Please try again."
+      );
     } finally {
       setSendingTryOn(false);
     }
@@ -268,20 +474,12 @@ export default function WardrobeScreen() {
             <Text style={styles.horizontalItemPrice}>{item.Price}</Text>
           </View>
         </TouchableOpacity>
-        <View style={styles.horizontalItemActions}>
-          <TouchableOpacity
-            style={styles.horizontalViewButton}
-            onPress={() => handleOpenProduct(item.ProductURL)}
-          >
-            <Text style={styles.horizontalButtonText}>View</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.horizontalRemoveButton}
-            onPress={() => handleRemoveItem(item)}
-          >
-            <Text style={styles.horizontalButtonText}>Remove</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={() => handleRemoveItem(item)}
+        >
+          <Text style={styles.removeButtonText}>Remove</Text>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -292,13 +490,12 @@ export default function WardrobeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Wardrobe</Text>
-        <Text style={styles.subtitle}>Select one item from each category</Text>
+        <Text style={styles.title}>My Wardrobe</Text>
       </View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B35" />
+          <ActivityIndicator size="large" color="#000000" />
         </View>
       ) : error ? (
         <View style={styles.emptyContainer}>
@@ -327,7 +524,7 @@ export default function WardrobeScreen() {
           {/* Tops Row */}
           {topItems.length > 0 && (
             <View style={styles.rowContainer}>
-              <Text style={styles.rowTitle}>Tops</Text>
+              <Text style={styles.rowTitle}>Tops I Liked</Text>
               <FlatList
                 data={topItems}
                 renderItem={renderHorizontalItem}
@@ -342,7 +539,7 @@ export default function WardrobeScreen() {
           {/* Bottoms Row */}
           {bottomItems.length > 0 && (
             <View style={styles.rowContainer}>
-              <Text style={styles.rowTitle}>Bottoms</Text>
+              <Text style={styles.rowTitle}>Bottoms I Liked</Text>
               <FlatList
                 data={bottomItems}
                 renderItem={renderHorizontalItem}
@@ -357,7 +554,7 @@ export default function WardrobeScreen() {
           {/* Shoes Row */}
           {shoesItems.length > 0 && (
             <View style={styles.rowContainer}>
-              <Text style={styles.rowTitle}>Shoes</Text>
+              <Text style={styles.rowTitle}>Shoes I Liked</Text>
               <FlatList
                 data={shoesItems}
                 renderItem={renderHorizontalItem}
@@ -380,12 +577,7 @@ export default function WardrobeScreen() {
                 {sendingTryOn ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <>
-                    <Text style={styles.tryOnButtonText}>Virtual Try-On</Text>
-                    <Text style={styles.tryOnButtonSubtext}>
-                      Try on your selected outfit
-                    </Text>
-                  </>
+                  <Text style={styles.tryOnButtonText}>Generate Outfit</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -399,22 +591,18 @@ export default function WardrobeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#ffffff",
   },
   header: {
-    paddingTop: 8,
+    paddingTop: 16,
     paddingHorizontal: 20,
-    paddingBottom: 6,
+    paddingBottom: 16,
+    alignItems: "center",
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 2,
-  },
-  subtitle: {
-    fontSize: 11,
-    color: "#999",
+    color: "#000000",
   },
   loadingContainer: {
     flex: 1,
@@ -430,140 +618,124 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#fff",
+    color: "#000000",
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#999",
+    color: "#666666",
     textAlign: "center",
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingVertical: 3,
+    paddingVertical: 16,
   },
   rowContainer: {
-    marginBottom: 8,
+    marginBottom: 24,
   },
   rowTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 6,
+    color: "#000000",
+    marginBottom: 12,
     paddingHorizontal: 20,
   },
   horizontalListContent: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 20,
   },
   horizontalItemCard: {
-    width: 110,
-    backgroundColor: "#2a2a2a",
-    borderRadius: 8,
+    width: 120,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
     overflow: "hidden",
-    marginHorizontal: 5,
+    marginHorizontal: 8,
   },
   selectableArea: {
     flex: 1,
   },
   horizontalItemImage: {
     width: "100%",
-    height: 110,
-    backgroundColor: "#3a3a3a",
+    height: 140,
+    backgroundColor: "#f5f5f5",
   },
   horizontalItemInfo: {
-    padding: 6,
+    padding: 8,
   },
   horizontalItemName: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 3,
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#000000",
+    marginBottom: 4,
   },
   horizontalItemPrice: {
     fontSize: 11,
-    color: "#FF6B35",
-    fontWeight: "600",
-    marginBottom: 4,
+    color: "#666666",
+    fontWeight: "400",
   },
-  horizontalItemActions: {
-    flexDirection: "row",
-    gap: 3,
-  },
-  horizontalViewButton: {
-    flex: 1,
-    backgroundColor: "#FF6B35",
-    paddingVertical: 3,
-    borderRadius: 4,
+  removeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     alignItems: "center",
   },
-  horizontalRemoveButton: {
-    flex: 1,
-    backgroundColor: "#3a3a3a",
-    paddingVertical: 3,
-    borderRadius: 4,
-    alignItems: "center",
-  },
-  horizontalButtonText: {
-    color: "#fff",
-    fontSize: 8,
-    fontWeight: "600",
+  removeButtonText: {
+    color: "#000000",
+    fontSize: 11,
+    fontWeight: "500",
   },
   selectedItemCard: {
     borderWidth: 2,
-    borderColor: "#FF6B35",
+    borderColor: "#000000",
   },
   selectedBadge: {
     position: "absolute",
-    top: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#FF6B35",
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#000000",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 10,
   },
   selectedBadgeText: {
-    color: "#fff",
-    fontSize: 12,
+    color: "#ffffff",
+    fontSize: 14,
     fontWeight: "bold",
   },
   tryOnContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 15,
-    marginTop: 10,
+    paddingVertical: 20,
+    marginTop: 20,
   },
   tryOnButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#000000",
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 20,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
   },
   tryOnButtonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  tryOnButtonSubtext: {
-    color: "#fff",
-    fontSize: 12,
-    opacity: 0.9,
+    fontWeight: "600",
   },
   retryButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#000000",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 16,
   },
   retryButtonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 14,
     fontWeight: "600",
   },

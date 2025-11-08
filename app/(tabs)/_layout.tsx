@@ -14,39 +14,45 @@ export default function TabLayout() {
     <AuthProvider>
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: "#FF6B35",
+          tabBarActiveTintColor: "#000000",
           headerShown: false,
           tabBarButton: HapticTab,
           tabBarStyle: {
-            backgroundColor: "#1a1a1a",
-            borderTopColor: "#2a2a2a",
+            backgroundColor: "#ffffff",
+            borderTopColor: "#e0e0e0",
             borderTopWidth: 1,
-            height: 80,
-            paddingBottom: 20,
-            paddingTop: 10,
+            height: 70,
+            paddingBottom: 8,
+            paddingTop: 8,
+            elevation: 8,
+            shadowColor: "#000",
+            shadowOffset: {
+              width: 0,
+              height: -2,
+            },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
           },
-          tabBarInactiveTintColor: "#999",
+          tabBarInactiveTintColor: "#666666",
           tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: "600",
+            fontSize: 12,
+            fontWeight: "500",
+          },
+          tabBarActiveLabelStyle: {
+            fontWeight: "bold",
           },
         }}
       >
         <Tabs.Screen
-          name="index"
-          options={{
-            title: "Home",
-            tabBarIcon: ({ color }) => (
-              <IconSymbol size={28} name="house.fill" color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
           name="outfit-swipe"
           options={{
             title: "For You",
-            tabBarIcon: ({ color }) => (
-              <IconSymbol size={28} name="person.fill" color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <IconSymbol 
+                size={24} 
+                name={focused ? "rectangle.stack.fill" : "rectangle.stack"} 
+                color={color} 
+              />
             ),
           }}
         />
@@ -55,7 +61,7 @@ export default function TabLayout() {
           options={{
             title: "Wardrobe",
             tabBarIcon: ({ color }) => (
-              <IconSymbol size={28} name="tshirt.fill" color={color} />
+              <IconSymbol size={24} name="tshirt" color={color} />
             ),
           }}
         />
@@ -64,7 +70,7 @@ export default function TabLayout() {
           options={{
             title: "Profile",
             tabBarIcon: ({ color }) => (
-              <IconSymbol size={28} name="person.circle.fill" color={color} />
+              <IconSymbol size={24} name="person" color={color} />
             ),
           }}
         />

@@ -23,6 +23,7 @@ export default function VirtualTryOn() {
 
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [tryOnResult, setTryOnResult] = useState<string | null>(null);
 
   const outfitImageUrl = params.outfitImageUrl as string;
@@ -111,15 +112,18 @@ export default function VirtualTryOn() {
     }
 
     setLoading(true);
+    setProgress(0);
 
     try {
+      // Simulate progress: 0-20% - Preparing images
+      setProgress(10);
       console.log("Converting user photo to base64...");
       console.log("User photo URI:", userPhoto);
       
       // Convert user image to base64 using FileSystem
       let userImageDataUri: string;
       try {
-        const userImageBase64 = await FileSystem.readAsStringAsync(userPhoto, {
+      const userImageBase64 = await FileSystem.readAsStringAsync(userPhoto, {
           encoding: 'base64' as any,
         });
         
@@ -130,7 +134,7 @@ export default function VirtualTryOn() {
         // Determine image format from URI
         const userImageFormat = userPhoto.toLowerCase().includes('.png') ? 'png' : 'jpeg';
         userImageDataUri = `data:image/${userImageFormat};base64,${userImageBase64}`;
-        
+
         console.log("User image base64 length:", userImageBase64.length);
         console.log("User image data URI length:", userImageDataUri.length);
         console.log("User image data URI starts with:", userImageDataUri.substring(0, 30));
@@ -143,6 +147,8 @@ export default function VirtualTryOn() {
         throw new Error(`Invalid user image data URI format: ${userImageDataUri ? userImageDataUri.substring(0, 50) : 'null'}`);
       }
 
+      // Progress: 20-40% - Processing product image
+      setProgress(30);
       console.log("Converting outfit image to base64...");
       console.log("Outfit image URL:", outfitImageUrl);
       
@@ -152,9 +158,9 @@ export default function VirtualTryOn() {
         // Download the image first
         const productImageUri = `${FileSystem.cacheDirectory}product_image_${Date.now()}.jpg`;
         const downloadResult = await FileSystem.downloadAsync(
-          outfitImageUrl,
-          productImageUri
-        );
+        outfitImageUrl,
+        productImageUri
+      );
         
         if (downloadResult.status !== 200) {
           throw new Error(`Failed to download product image: HTTP ${downloadResult.status}`);
@@ -185,6 +191,8 @@ export default function VirtualTryOn() {
         throw new Error(`Invalid product image data URI format: ${productImageDataUri ? productImageDataUri.substring(0, 50) : 'null'}`);
       }
 
+      // Progress: 40-50% - Preparing request
+      setProgress(45);
       console.log("Sending request to try-on API...");
       
       // Validate both images are ready
@@ -218,6 +226,20 @@ export default function VirtualTryOn() {
       }
       console.log("JSON stringification verified");
       
+      // Progress: 50-90% - Sending request and processing
+      setProgress(60);
+      
+      // Simulate progress during API processing
+      let progressInterval: ReturnType<typeof setInterval> | null = null;
+      progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev < 90) {
+            return Math.min(prev + 2, 90);
+          }
+          return prev;
+        });
+      }, 200);
+      
       const response = await fetch(
         "https://stylist-ai-be.onrender.com/api/try-on/generate",
         {
@@ -231,11 +253,15 @@ export default function VirtualTryOn() {
       );
 
       if (!response.ok) {
+        if (progressInterval) clearInterval(progressInterval);
         const errorText = await response.text();
         console.error("API Error:", errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      // Progress: 90-100% - Processing response
+      setProgress(95);
+      if (progressInterval) clearInterval(progressInterval);
       const contentType = response.headers.get("content-type");
 
       const processResult = (base64: string | null | undefined) => {
@@ -291,6 +317,7 @@ export default function VirtualTryOn() {
         console.log("Result image found, type:", typeof resultImage);
         console.log("Result image length:", typeof resultImage === 'string' ? resultImage.length : 'N/A');
         console.log("Result image preview (first 100 chars):", typeof resultImage === 'string' ? resultImage.substring(0, 100) : 'N/A');
+        setProgress(100);
         processResult(resultImage);
       } else {
         const blob = await response.blob();
@@ -300,6 +327,7 @@ export default function VirtualTryOn() {
           if (!result || typeof result !== 'string') {
             throw new Error("Failed to convert blob to data URL");
           }
+          setProgress(100);
           processResult(result);
         };
         reader.onerror = () => {
@@ -309,6 +337,7 @@ export default function VirtualTryOn() {
       }
     } catch (error) {
       console.error("Virtual try-on error:", error);
+      setProgress(0);
       Alert.alert(
         "Error",
         error instanceof Error
@@ -317,6 +346,7 @@ export default function VirtualTryOn() {
       );
     } finally {
       setLoading(false);
+      setProgress(0);
     }
   };
 
@@ -328,7 +358,7 @@ export default function VirtualTryOn() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
+          <Ionicons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Virtual Try-On</Text>
         <View style={{ width: 40 }} />
@@ -376,7 +406,7 @@ export default function VirtualTryOn() {
                 style={styles.changePhotoButton}
                 onPress={selectPhotoOption}
               >
-                <Ionicons name="camera" size={20} color="#FFF" />
+                <Ionicons name="camera" size={20} color="#000000" />
                 <Text style={styles.changePhotoText}>Change Photo</Text>
               </TouchableOpacity>
             </View>
@@ -385,7 +415,7 @@ export default function VirtualTryOn() {
               style={styles.uploadButton}
               onPress={selectPhotoOption}
             >
-              <Ionicons name="cloud-upload-outline" size={48} color="#95A5A6" />
+              <Ionicons name="cloud-upload-outline" size={48} color="#666666" />
               <Text style={styles.uploadButtonText}>Upload Your Photo</Text>
               <Text style={styles.uploadButtonSubtext}>
                 Take a photo or choose from gallery
@@ -398,19 +428,23 @@ export default function VirtualTryOn() {
         <TouchableOpacity
           style={[
             styles.tryOnButton,
-            (!userPhoto || loading) && styles.tryOnButtonDisabled,
+            loading ? styles.tryOnButtonLoading : (!userPhoto && styles.tryOnButtonDisabled),
           ]}
           onPress={handleVirtualTryOn}
           disabled={!userPhoto || loading}
         >
           {loading ? (
-            <>
-              <ActivityIndicator color="#FFF" size="small" />
-              <Text style={styles.tryOnButtonText}>Processing...</Text>
-            </>
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBarContainer}>
+                <View style={[styles.progressBar, { width: `${progress}%` }]} />
+              </View>
+              <Text style={styles.processingText}>
+                {progress < 100 ? `Processing... ${progress}%` : "Complete!"}
+              </Text>
+            </View>
           ) : (
             <>
-              <Ionicons name="sparkles" size={24} color="#FFF" />
+              <Ionicons name="sparkles" size={24} color="#FFFFFF" />
               <Text style={styles.tryOnButtonText}>Try On Now</Text>
             </>
           )}
@@ -423,7 +457,7 @@ export default function VirtualTryOn() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#ffffff",
   },
   header: {
     flexDirection: "row",
@@ -432,22 +466,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: "#3a3a3a",
+    borderBottomColor: "#e0e0e0",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#f5f5f5",
     justifyContent: "center",
     alignItems: "center",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#FFF",
+    color: "#000000",
   },
   scrollView: {
     flex: 1,
@@ -462,20 +496,28 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#FFF",
+    color: "#000000",
     marginBottom: 12,
   },
   outfitCard: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#3a3a3a",
+    borderColor: "#e0e0e0",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   outfitImage: {
     width: "100%",
     height: 300,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#f5f5f5",
   },
   outfitDetails: {
     padding: 16,
@@ -483,48 +525,50 @@ const styles = StyleSheet.create({
   outfitName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FFF",
+    color: "#000000",
     marginBottom: 4,
   },
   outfitPrice: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FF6B35",
+    color: "#000000",
     marginBottom: 4,
   },
   outfitColor: {
     fontSize: 14,
-    color: "#999",
+    color: "#666666",
   },
   uploadButton: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     padding: 40,
     alignItems: "center",
     borderWidth: 2,
-    borderColor: "#3a3a3a",
+    borderColor: "#e0e0e0",
     borderStyle: "dashed",
   },
   uploadButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FFF",
+    color: "#000000",
     marginTop: 16,
   },
   uploadButtonSubtext: {
     fontSize: 14,
-    color: "#999",
+    color: "#666666",
     marginTop: 4,
   },
   photoContainer: {
     position: "relative",
     borderRadius: 16,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
   userPhoto: {
     width: "100%",
     height: 400,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#f5f5f5",
   },
   changePhotoButton: {
     position: "absolute",
@@ -532,19 +576,21 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: "#ffffff",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
     gap: 8,
+    borderWidth: 1.5,
+    borderColor: "#000000",
   },
   changePhotoText: {
-    color: "#FFF",
+    color: "#000000",
     fontSize: 14,
     fontWeight: "600",
   },
   tryOnButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#000000",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -553,13 +599,41 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8,
   },
+  tryOnButtonLoading: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1.5,
+    borderColor: "#000000",
+  },
   tryOnButtonDisabled: {
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#e0e0e0",
     opacity: 0.5,
   },
   tryOnButtonText: {
-    color: "#FFF",
+    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "600",
+    marginTop: 8,
+  },
+  processingText: {
+    color: "#000000",
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 8,
+  },
+  progressContainer: {
+    width: "100%",
+    alignItems: "center",
+  },
+  progressBarContainer: {
+    width: "100%",
+    height: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: "#000000",
+    borderRadius: 2,
   },
 });
