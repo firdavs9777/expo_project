@@ -39,6 +39,20 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app needs access to your photos.",
+          "cameraPermission": "The app needs access to your camera."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow app to save photos to your gallery.",
+          "savePhotosPermission": "Allow app to save photos to your gallery."
+        }
       ]
     ],
     "experiments": {

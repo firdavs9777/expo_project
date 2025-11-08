@@ -1,4 +1,5 @@
-import { useLocalSearchParams } from "expo-router";
+import { saveLikedItem } from "@/utils/likedItemsStorage";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,7 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { saveLikedItem } from "@/utils/likedItemsStorage";
 
 const { width, height } = Dimensions.get("window");
 const SWIPE_THRESHOLD = width * 0.25;
@@ -44,7 +44,7 @@ const CATEGORY_MAP = {
 
 export default function OutfitSwipeDeck() {
   const params = useLocalSearchParams();
-
+  const router = useRouter();
   // Get color type from params or use default
   const personalColorType =
     (params.personalColorType as string) || "Deep Autumn";
@@ -60,7 +60,7 @@ export default function OutfitSwipeDeck() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMoreItems, setHasMoreItems] = useState(true);
-  
+
   // Prevent concurrent requests
   const isFetchingRef = useRef(false);
   const waitingForItemsRef = useRef(false);
@@ -146,19 +146,19 @@ export default function OutfitSwipeDeck() {
       retryCountRef.current = 0;
 
       let data = await response.json();
-      
+
       // Ensure data is an array
       if (!Array.isArray(data)) {
         console.error("API returned non-array data:", data);
         throw new Error("Invalid response format from API");
       }
-      
+
       // Normalize property names (handle both ImageURL and imageUrl)
       data = data.map((item: any) => ({
         ...item,
         imageUrl: item.imageUrl || item.ImageURL || item.imageURL || "",
       }));
-      
+
       console.log(
         `Fetched ${data.length} items for ${category} (${apiCategory})`
       );
@@ -380,7 +380,11 @@ export default function OutfitSwipeDeck() {
             style={styles.retryButton}
             onPress={() => {
               retryCountRef.current = 0;
-              fetchOutfitItems(selectedCategory, currentSubCategoryIndex, false);
+              fetchOutfitItems(
+                selectedCategory,
+                currentSubCategoryIndex,
+                false
+              );
             }}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
@@ -411,13 +415,9 @@ export default function OutfitSwipeDeck() {
         </SafeAreaView>
       );
     }
-    
+
     // Check if we should show empty state or wait for more items
-    if (
-      !hasMoreCachedItems &&
-      !hasMoreSubcategories &&
-      !hasMoreItems
-    ) {
+    if (!hasMoreCachedItems && !hasMoreSubcategories && !hasMoreItems) {
       return (
         <SafeAreaView style={styles.container}>
           <View style={styles.emptyContainer}>
@@ -443,7 +443,7 @@ export default function OutfitSwipeDeck() {
         </SafeAreaView>
       );
     }
-    
+
     // If more items might be available, show loading
     return (
       <SafeAreaView style={styles.container}>
@@ -583,14 +583,19 @@ export default function OutfitSwipeDeck() {
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => {
-            // Show item details or open product URL
-            console.log("Info:", currentItem.ProductURL);
+            router.push({
+              pathname: "/virtual-try",
+              params: {
+                outfitId: currentItem.ID,
+                outfitImageUrl: currentItem.imageUrl, // Pass the outfit image URL
+                outfitName: currentItem.ColorName || "Selected Outfit",
+              },
+            });
           }}
         >
           <Text style={styles.actionIcon}>ℹ️</Text>
         </TouchableOpacity>
       </View>
-
       {/* Progress Indicator */}
       <View style={styles.progressContainer}>
         <Text style={styles.progressText}>
