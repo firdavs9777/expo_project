@@ -15,7 +15,7 @@ import {
 
 const { width, height } = Dimensions.get("window");
 
-const API_BASE_URL = "http://172.18.8.215:8000";
+const API_BASE_URL = "https://stylist-ai-be.onrender.com";
 export default function ProfilePhotoScreen() {
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
@@ -34,46 +34,71 @@ export default function ProfilePhotoScreen() {
     try {
       setUploading(true);
 
-      // Create FormData
-      const formData = new FormData();
+      // Convert image to base64
+      console.log("Converting image to base64...");
+      const response = await fetch(photoUri);
+      const blob = await response.blob();
+      
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const base64data = reader.result as string;
+            // Ensure it has the data URL prefix
+            const base64WithPrefix = base64data.startsWith('data:') 
+              ? base64data 
+              : `data:image/jpeg;base64,${base64data}`;
 
-      // Add the image file
-      const filename = photoUri.split("/").pop() || "photo.jpg";
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : "image/jpeg";
+            console.log("Base64 length:", base64WithPrefix.length);
+            
+            // Prepare JSON body
+            const requestBody = {
+              image: base64WithPrefix,
+            };
 
-      formData.append("file", {
-        uri: photoUri,
-        name: filename,
-        type: type,
-      } as any);
+            // Upload to your backend
+            const apiResponse = await fetch(`${API_BASE_URL}/api/analyze/color`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+              },
+              body: JSON.stringify(requestBody),
+            });
 
-      // Upload to your backend
-      const response = await fetch(`${API_BASE_URL}/api/test/upload`, {
-        method: "POST",
-        body: formData,
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+            console.log("Response status:", apiResponse.status);
+
+            if (!apiResponse.ok) {
+              // Try to get error message from response
+              const errorText = await apiResponse.text();
+              console.error("Server error response:", errorText);
+              throw new Error(`Upload failed: ${apiResponse.status} - ${errorText}`);
+            }
+
+            const result = await apiResponse.json();
+            console.log("Upload successful:", result);
+
+            resolve(result);
+          } catch (error) {
+            console.error("Upload error:", error);
+            reject(error);
+          } finally {
+            setUploading(false);
+          }
+        };
+        reader.onerror = (error) => {
+          console.error("FileReader error:", error);
+          setUploading(false);
+          reject(error);
+        };
+        reader.readAsDataURL(blob);
       });
-      console.log(response);
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log("Upload successful:", result);
-
-      return result;
     } catch (error) {
       console.error("Upload error:", error);
-      throw error;
-    } finally {
       setUploading(false);
+      throw error;
     }
   };
-
   const handleCapture = async () => {
     if (!cameraReady) {
       Alert.alert(
