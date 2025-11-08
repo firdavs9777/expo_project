@@ -1,9 +1,13 @@
-import React, { useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Image,
   PanResponder,
+  SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,50 +17,45 @@ import {
 const { width, height } = Dimensions.get("window");
 const SWIPE_THRESHOLD = width * 0.25;
 
+const API_BASE_URL = "https://stylist-ai-be.onrender.com";
+
 interface OutfitItem {
-  id: string;
-  name: string;
-  price: string;
-  image: string;
-  brand: string;
-  category: "Top" | "Bottom" | "Shoes";
+  ID: number;
+  Description: string;
+  Price: string;
+  ImageURL: string;
+  ColorHEX: string;
+  ProductURL: string;
+  ColorName: string;
+  DetailDescription: string;
+  Type: string;
+  PersonalColorType: string;
+  popularity: number;
 }
 
-const OUTFIT_ITEMS: OutfitItem[] = [
-  {
-    id: "1",
-    name: "Coral Pink Blouse",
-    price: "₩52,000",
-    image:
-      "https://via.placeholder.com/400x600/FF7F7F/FFFFFF?text=Coral+Blouse",
-    brand: "Zara",
-    category: "Top",
-  },
-  {
-    id: "2",
-    name: "Pearl Denim Jacket",
-    price: "₩78,000",
-    image:
-      "https://via.placeholder.com/400x600/87CEEB/FFFFFF?text=Denim+Jacket",
-    brand: "H&M",
-    category: "Top",
-  },
-  {
-    id: "3",
-    name: "Beige Linen Pants",
-    price: "₩45,000",
-    image: "https://via.placeholder.com/400x600/F5DEB3/000000?text=Linen+Pants",
-    brand: "Uniqlo",
-    category: "Bottom",
-  },
-];
+// Map UI categories to API categories (one at a time)
+const CATEGORY_MAP = {
+  Top: ["t-shirts", "shirt", "polos", "outwear"],
+  Bottom: ["pants", "jeans", "shorts"],
+  Shoes: ["shoes", "sneakers", "boots"],
+};
 
 export default function OutfitSwipeDeck() {
+  const params = useLocalSearchParams();
+
+  // Get color type from params or use default
+  const personalColorType =
+    (params.personalColorType as string) || "Deep Autumn";
+
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [likedItems, setLikedItems] = useState<string[]>([]);
+  const [likedItems, setLikedItems] = useState<number[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<
     "Top" | "Bottom" | "Shoes"
   >("Top");
+  const [currentSubCategoryIndex, setCurrentSubCategoryIndex] = useState(0);
+  const [outfitItems, setOutfitItems] = useState<OutfitItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const position = useRef(new Animated.ValueXY()).current;
   const rotate = position.x.interpolate({
@@ -76,6 +75,68 @@ export default function OutfitSwipeDeck() {
     outputRange: [1, 0],
     extrapolate: "clamp",
   });
+
+  // Fetch items from backend - one subcategory at a time
+  const fetchOutfitItems = async (
+    category: "Top" | "Bottom" | "Shoes",
+    subCategoryIndex: number = 0
+  ) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const apiCategories = CATEGORY_MAP[category];
+      const apiCategory = apiCategories[subCategoryIndex];
+
+      if (!apiCategory) {
+        // No more subcategories, reset to first
+        setCurrentSubCategoryIndex(0);
+        fetchOutfitItems(category, 0);
+        return;
+      }
+
+      const url = `${API_BASE_URL}/api/outfit/season/${encodeURIComponent(
+        personalColorType
+      )}/category/${apiCategory}`;
+
+      console.log("Fetching from:", url);
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(
+        `Fetched ${data.length} items for ${category} (${apiCategory})`
+      );
+
+      if (data.length === 0) {
+        // This subcategory has no items, try next one
+        console.log(`No items for ${apiCategory}, trying next subcategory...`);
+        setCurrentSubCategoryIndex(subCategoryIndex + 1);
+        fetchOutfitItems(category, subCategoryIndex + 1);
+        return;
+      }
+
+      setOutfitItems(data);
+      setCurrentIndex(0); // Reset to first item
+      setCurrentSubCategoryIndex(subCategoryIndex);
+    } catch (err) {
+      console.error("Error fetching outfit items:", err);
+      setError("Failed to load items. Please try again.");
+      setOutfitItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch items when component mounts or category changes
+  useEffect(() => {
+    setCurrentSubCategoryIndex(0); // Reset to first subcategory
+    fetchOutfitItems(selectedCategory, 0);
+  }, [selectedCategory]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -104,11 +165,38 @@ export default function OutfitSwipeDeck() {
     }).start(() => onSwipeComplete(direction));
   };
 
-  const onSwipeComplete = (direction: "left" | "right") => {
-    const item = OUTFIT_ITEMS[currentIndex];
+  const onSwipeComplete = async (direction: "left" | "right") => {
+    const item = outfitItems[currentIndex];
 
-    if (direction === "right") {
-      setLikedItems([...likedItems, item.id]);
+    if (direction === "right" && item) {
+      setLikedItems([...likedItems, item.ID]);
+
+      // Optional: Save like to backend
+      try {
+        await fetch(`${API_BASE_URL}/api/likes`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            itemId: item.ID,
+            personalColorType: personalColorType,
+            category: selectedCategory,
+          }),
+        });
+      } catch (error) {
+        console.error("Error saving like:", error);
+      }
+    }
+
+    // Check if we've reached the end of current subcategory
+    if (currentIndex + 1 >= outfitItems.length) {
+      // Load next subcategory
+      console.log("Finished this subcategory, loading next...");
+      const nextSubCategoryIndex = currentSubCategoryIndex + 1;
+      fetchOutfitItems(selectedCategory, nextSubCategoryIndex);
+      position.setValue({ x: 0, y: 0 });
+      return;
     }
 
     position.setValue({ x: 0, y: 0 });
@@ -130,15 +218,54 @@ export default function OutfitSwipeDeck() {
     forceSwipe("left");
   };
 
-  const currentItem = OUTFIT_ITEMS[currentIndex];
+  const handleCategoryChange = (category: "Top" | "Bottom" | "Shoes") => {
+    setSelectedCategory(category);
+    setCurrentSubCategoryIndex(0);
+  };
 
-  if (currentIndex >= OUTFIT_ITEMS.length) {
+  // Loading state
+  if (loading && outfitItems.length === 0) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+          <Text style={styles.loadingText}>
+            Loading {selectedCategory} items...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() =>
+              fetchOutfitItems(selectedCategory, currentSubCategoryIndex)
+            }
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const currentItem = outfitItems[currentIndex];
+
+  // No more items
+  if (currentIndex >= outfitItems.length || !currentItem) {
+    return (
+      <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>No more items! 🎉</Text>
           <Text style={styles.emptySubtitle}>
-            You have reviewed all available items.
+            You have reviewed all {selectedCategory} items.
           </Text>
           <TouchableOpacity
             style={styles.resetButton}
@@ -150,23 +277,27 @@ export default function OutfitSwipeDeck() {
             <Text style={styles.resetButtonText}>Start Over</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
+
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Spring Warm</Text>
-        <Text style={styles.headerSubtitle}>For You</Text>
+        <View>
+          <Text style={styles.headerTitle}>{personalColorType}</Text>
+          <Text style={styles.headerSubtitle}>For You</Text>
+        </View>
       </View>
 
       {/* Category Tabs */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, selectedCategory === "Top" && styles.tabActive]}
-          onPress={() => setSelectedCategory("Top")}
+          onPress={() => handleCategoryChange("Top")}
         >
           <Text
             style={[
@@ -182,7 +313,7 @@ export default function OutfitSwipeDeck() {
             styles.tab,
             selectedCategory === "Bottom" && styles.tabActive,
           ]}
-          onPress={() => setSelectedCategory("Bottom")}
+          onPress={() => handleCategoryChange("Bottom")}
         >
           <Text
             style={[
@@ -195,7 +326,7 @@ export default function OutfitSwipeDeck() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, selectedCategory === "Shoes" && styles.tabActive]}
-          onPress={() => setSelectedCategory("Shoes")}
+          onPress={() => handleCategoryChange("Shoes")}
         >
           <Text
             style={[
@@ -234,22 +365,31 @@ export default function OutfitSwipeDeck() {
           {/* Item Image */}
           <View style={styles.imageContainer}>
             <Image
-              source={{ uri: currentItem.image }}
+              source={{ uri: currentItem.ImageURL }}
               style={styles.itemImage}
+              resizeMode="cover"
             />
           </View>
 
           {/* Item Info */}
           <View style={styles.itemInfo}>
-            <Text style={styles.itemName}>{currentItem.name}</Text>
-            <Text style={styles.itemPrice}>{currentItem.price}</Text>
-            <Text style={styles.itemBrand}>{currentItem.brand}</Text>
+            <Text style={styles.itemName} numberOfLines={2}>
+              {currentItem.Description}
+            </Text>
+            <Text style={styles.itemPrice}>{currentItem.Price}</Text>
+            <Text style={styles.itemBrand}>{currentItem.ColorName}</Text>
           </View>
 
           {/* Virtual Try-On Badge */}
-          <View style={styles.tryOnBadge}>
+          <TouchableOpacity
+            style={styles.tryOnBadge}
+            onPress={() => {
+              // Open product URL or virtual try-on
+              console.log("Virtual Try-On:", currentItem.ProductURL);
+            }}
+          >
             <Text style={styles.tryOnText}>👁️ Virtual Try-On</Text>
-          </View>
+          </TouchableOpacity>
         </Animated.View>
       </View>
 
@@ -266,11 +406,24 @@ export default function OutfitSwipeDeck() {
           <Text style={styles.likeIcon}>❤️</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => {
+            // Show item details or open product URL
+            console.log("Info:", currentItem.ProductURL);
+          }}
+        >
           <Text style={styles.actionIcon}>ℹ️</Text>
         </TouchableOpacity>
       </View>
-    </View>
+
+      {/* Progress Indicator */}
+      <View style={styles.progressContainer}>
+        <Text style={styles.progressText}>
+          {currentIndex + 1} / {outfitItems.length}
+        </Text>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -280,20 +433,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#1a1a1a",
   },
   header: {
-    paddingTop: 60,
+    paddingTop: 10,
     paddingHorizontal: 30,
-    paddingBottom: 20,
+    paddingBottom: 15,
     alignItems: "center",
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#fff",
+    textAlign: "center",
   },
   headerSubtitle: {
     fontSize: 14,
     color: "#999",
     marginTop: 4,
+    textAlign: "center",
   },
   tabsContainer: {
     flexDirection: "row",
@@ -377,7 +532,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   itemName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#fff",
     marginBottom: 4,
@@ -389,7 +544,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   itemBrand: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#999",
   },
   tryOnBadge: {
@@ -411,6 +566,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 20,
     paddingVertical: 20,
+    paddingBottom: 10,
   },
   actionButton: {
     width: 60,
@@ -435,24 +591,47 @@ const styles = StyleSheet.create({
   likeIcon: {
     fontSize: 32,
   },
-  bottomNav: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
+  progressContainer: {
+    alignItems: "center",
+    paddingBottom: 10,
   },
-  navItem: {
+  progressText: {
+    color: "#999",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  loadingContainer: {
     flex: 1,
+    justifyContent: "center",
     alignItems: "center",
   },
-  navIcon: {
-    fontSize: 20,
-    marginBottom: 4,
+  loadingText: {
+    color: "#fff",
+    fontSize: 16,
+    marginTop: 16,
   },
-  navText: {
-    fontSize: 11,
-    color: "#999",
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  errorText: {
+    color: "#fff",
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 25,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   emptyContainer: {
     flex: 1,

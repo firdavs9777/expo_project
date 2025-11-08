@@ -47,14 +47,12 @@ export default function SignUpScreen() {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
 
-        {/* Logo/Icon */}
         <View style={styles.iconContainer}>
           <View style={styles.iconCircle}>
             <Text style={styles.iconEmoji}>🍌</Text>
           </View>
         </View>
 
-        {/* Title */}
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Create Your Account</Text>
           <Text style={styles.subtitle}>
@@ -62,19 +60,6 @@ export default function SignUpScreen() {
           </Text>
         </View>
 
-        {/* Name Input */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Full Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your full name"
-            placeholderTextColor="#666"
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
-
-        {/* Email Input */}
         <View style={styles.inputContainer}>
           <Text style={styles.inputLabel}>Email</Text>
           <TextInput
