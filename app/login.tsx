@@ -67,7 +67,7 @@ export default function LoginScreen() {
       >
         <View style={styles.iconContainer}>
           <View style={styles.iconCircle}>
-            <Text style={styles.iconEmoji}>🍌</Text>
+            <Text style={styles.iconEmoji}>🎨</Text>
           </View>
         </View>
 

@@ -1,6 +1,9 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,18 +17,62 @@ import {
 
 export default function SignUpScreen() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const { register } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSignUp = () => {
-    // Add your signup logic here
-    console.log("Sign up with:", name, email, password);
-    // Navigate to welcome screen
-    router.push("/welcome");
+  const handleSignUp = async () => {
+    // Validation
+    if (!email || !password || !confirmPassword) {
+      Alert.alert("Error", "Please fill in all fields");
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert("Error", "Please enter a valid email address");
+      return;
+    }
+
+    // Password length validation
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters long");
+      return;
+    }
+
+    // Password match validation
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await register(email, password);
+
+      // Success! Navigate to main app
+      Alert.alert("Success", "Sign up successfully completed!", [
+        {
+          text: "OK",
+          onPress: () => router.replace("/(tabs)/profile"),
+        },
+      ]);
+    } catch (error: any) {
+      console.error("Sign up error:", error);
+      Alert.alert(
+        "Sign Up Failed",
+        error.message || "Could not create account. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -49,17 +96,18 @@ export default function SignUpScreen() {
 
         <View style={styles.iconContainer}>
           <View style={styles.iconCircle}>
-            <Text style={styles.iconEmoji}>🍌</Text>
+            <Text style={styles.iconEmoji}>🎨</Text>
           </View>
         </View>
 
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Create Your Account</Text>
           <Text style={styles.subtitle}>
-            Join BananaTalk and start connecting!
+            Join StylerX and start connecting!
           </Text>
         </View>
 
+        {/* Email Input */}
         <View style={styles.inputContainer}>
           <Text style={styles.inputLabel}>Email</Text>
           <TextInput
@@ -70,6 +118,8 @@ export default function SignUpScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoComplete="email"
+            editable={!loading}
           />
         </View>
 
@@ -79,11 +129,13 @@ export default function SignUpScreen() {
           <View style={styles.passwordContainer}>
             <TextInput
               style={styles.passwordInput}
-              placeholder="Create a password"
+              placeholder="Create a password (min 6 characters)"
               placeholderTextColor="#666"
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              editable={!loading}
             />
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
@@ -107,6 +159,8 @@ export default function SignUpScreen() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showConfirmPassword}
+              autoCapitalize="none"
+              editable={!loading}
             />
             <TouchableOpacity
               onPress={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -121,11 +175,16 @@ export default function SignUpScreen() {
 
         {/* Sign Up Button */}
         <TouchableOpacity
-          style={styles.signUpButton}
+          style={[styles.signUpButton, loading && styles.signUpButtonDisabled]}
           onPress={handleSignUp}
           activeOpacity={0.8}
+          disabled={loading}
         >
-          <Text style={styles.signUpButtonText}>Create Account</Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.signUpButtonText}>Create Account</Text>
+          )}
         </TouchableOpacity>
 
         {/* Login Link */}
@@ -150,7 +209,7 @@ export default function SignUpScreen() {
 
         <View style={styles.socialButtonsRow}>
           <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-            <Text style={styles.socialButtonText}>Google</Text>
+            <Text style={styles.socialButtonText}>🔍 Google</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
             <Text style={styles.socialButtonText}>🍎 Apple</Text>
@@ -270,6 +329,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 10,
+  },
+  signUpButtonDisabled: {
+    opacity: 0.6,
   },
   signUpButtonText: {
     color: "#fff",

@@ -12,6 +12,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isLoggedIn: boolean;
+  register: (email: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -44,6 +45,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const register = async (email: string, password: string) => {
+    try {
+      const response = await fetch(
+        "https://stylist-ai-be.onrender.com/api/auth/register",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Login failed");
+      }
+
+      const data = await response.json();
+
+      // Save user data
+      const userData: User = {
+        user_id: data.user_id,
+        email: data.email,
+        access_token: data.access_token,
+        token_type: data.token_type,
+      };
+
+      // Store in AsyncStorage
+      await AsyncStorage.setItem("user", JSON.stringify(userData));
+
+      // Update state
+      setUser(userData);
+    } catch (error) {
+      console.error("Login error:", error);
+      throw error;
+    }
+  };
   const login = async (email: string, password: string) => {
     try {
       const response = await fetch(
@@ -98,6 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     isLoading,
     isLoggedIn: !!user,
     login,
+    register,
     logout,
     checkAuth,
   };
