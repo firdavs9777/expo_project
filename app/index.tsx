@@ -17,12 +17,10 @@ export default function LanguageSelectScreen() {
 
   const handleLanguageSelect = (language: string) => {
     setSelectedLanguage(language);
-    // Navigate to login after short delay
     setTimeout(() => {
       router.push("/(tabs)/profile");
     }, 300);
   };
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />

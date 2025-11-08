@@ -159,7 +159,26 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => handleMenuPress(() => console.log("Liked Items"))}
+            onPress={() => {
+              if (!isLoggedIn) {
+                Alert.alert(
+                  "Login Required",
+                  "Please log in to access this feature",
+                  [
+                    {
+                      text: "Cancel",
+                      style: "cancel",
+                    },
+                    {
+                      text: "Log In",
+                      onPress: () => router.push("/login"),
+                    },
+                  ]
+                );
+                return;
+              }
+              router.push("/liked-items");
+            }}
           >
             <Text style={styles.menuIcon}>❤️</Text>
             <Text style={styles.menuText}>Liked Items</Text>
