@@ -1,22 +1,23 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
 import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { useColorScheme } from "react-native";
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-      </Stack>
+    <Stack screenOptions={{ headerShown: false }}>
+      {/* Welcome/Language Selection */}
+      <Stack.Screen name="index" />
 
-      <StatusBar style="auto" />
-    </ThemeProvider>
+      {/* Auth Screens */}
+      <Stack.Screen name="auth/login" />
+      <Stack.Screen name="auth/signup" />
+      <Stack.Screen name="auth/welcome" />
+
+      {/* Onboarding Screens */}
+      <Stack.Screen name="onboarding/preparation" />
+      <Stack.Screen name="onboarding/camera-profile" />
+      <Stack.Screen name="onboarding/results" />
+
+      {/* Main App (Tabs) */}
+      <Stack.Screen name="(tabs)" />
+    </Stack>
   );
 }

@@ -15,6 +15,11 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarStyle: {
+          backgroundColor: "#1a1a1a",
+          borderTopColor: "#2a2a2a",
+        },
+        tabBarInactiveTintColor: "#999",
       }}
     >
       <Tabs.Screen
@@ -23,6 +28,33 @@ export default function TabLayout() {
           title: "Home",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="house.fill" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="swipe"
+        options={{
+          title: "For You",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="person.fill" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="wardrobe"
+        options={{
+          title: "Wardrobe",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="tshirt.fill" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="person.circle.fill" color={color} />
           ),
         }}
       />

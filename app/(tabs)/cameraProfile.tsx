@@ -38,33 +38,36 @@ export default function ProfilePhotoScreen() {
       console.log("Converting image to base64...");
       const response = await fetch(photoUri);
       const blob = await response.blob();
-      
+
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = async () => {
           try {
             const base64data = reader.result as string;
             // Ensure it has the data URL prefix
-            const base64WithPrefix = base64data.startsWith('data:') 
-              ? base64data 
+            const base64WithPrefix = base64data.startsWith("data:")
+              ? base64data
               : `data:image/jpeg;base64,${base64data}`;
 
             console.log("Base64 length:", base64WithPrefix.length);
-            
+
             // Prepare JSON body
             const requestBody = {
               image: base64WithPrefix,
             };
 
             // Upload to your backend
-            const apiResponse = await fetch(`${API_BASE_URL}/api/analyze/color`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-              },
-              body: JSON.stringify(requestBody),
-            });
+            const apiResponse = await fetch(
+              `${API_BASE_URL}/api/analyze/color`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify(requestBody),
+              }
+            );
 
             console.log("Response status:", apiResponse.status);
 
@@ -72,7 +75,9 @@ export default function ProfilePhotoScreen() {
               // Try to get error message from response
               const errorText = await apiResponse.text();
               console.error("Server error response:", errorText);
-              throw new Error(`Upload failed: ${apiResponse.status} - ${errorText}`);
+              throw new Error(
+                `Upload failed: ${apiResponse.status} - ${errorText}`
+              );
             }
 
             const result = await apiResponse.json();
@@ -126,7 +131,7 @@ export default function ProfilePhotoScreen() {
             onPress: () => {
               // Navigate to results with the upload info
               router.push({
-                pathname: "/onboarding/results",
+                pathname: "/analysis-results", // ← Make sure this matches
                 params: {
                   photoUri: photo.uri,
                   uploadData: JSON.stringify(uploadResult),
