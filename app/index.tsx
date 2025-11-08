@@ -1,5 +1,6 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   StatusBar,
@@ -13,6 +14,13 @@ const { height } = Dimensions.get("window");
 
 export default function LanguageSelectScreen() {
   const router = useRouter();
+  const { isLoggedIn, isLoading } = useAuth();
+  // ✅ Redirect if already logged in
+  useEffect(() => {
+    if (isLoggedIn) {
+      router.replace("/(tabs)/profile");
+    }
+  }, [isLoggedIn, isLoading, router]);
   const [selectedLanguage, setSelectedLanguage] = useState("");
 
   const handleLanguageSelect = (language: string) => {

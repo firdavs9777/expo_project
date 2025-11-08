@@ -3,13 +3,10 @@ import React from "react";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { AuthProvider } from "@/contexts/AuthContext";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <AuthProvider>
       <Tabs
@@ -38,9 +35,6 @@ export default function TabLayout() {
             fontSize: 12,
             fontWeight: "500",
           },
-          tabBarActiveLabelStyle: {
-            fontWeight: "bold",
-          },
         }}
       >
         <Tabs.Screen
@@ -48,10 +42,10 @@ export default function TabLayout() {
           options={{
             title: "For You",
             tabBarIcon: ({ color, focused }) => (
-              <IconSymbol 
-                size={24} 
-                name={focused ? "rectangle.stack.fill" : "rectangle.stack"} 
-                color={color} 
+              <IconSymbol
+                size={24}
+                name={focused ? "rectangle.stack.fill" : "rectangle.stack"}
+                color={color}
               />
             ),
           }}

@@ -53,7 +53,7 @@ export default function ProfileScreen() {
 
         setUserProfile(data);
 
-        if (data.face_image) {
+        if (data.body) {
           console.log("Face image found in profile");
           console.log("Face image type:", typeof data.face_image);
           console.log("Face image length:", data.face_image.length);
