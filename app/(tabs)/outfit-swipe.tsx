@@ -17,7 +17,7 @@ import {
 
 const { width, height } = Dimensions.get("window");
 const SWIPE_THRESHOLD = width * 0.25;
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 5;
 
 const API_BASE_URL = "https://stylist-ai-be.onrender.com";
 
@@ -62,11 +62,13 @@ export default function OutfitSwipeDeck() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMoreItems, setHasMoreItems] = useState(true);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
 
   // Prevent concurrent requests
   const isFetchingRef = useRef(false);
   const waitingForItemsRef = useRef(false);
   const retryCountRef = useRef(0);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const position = useRef(new Animated.ValueXY()).current;
   const rotate = position.x.interpolate({
@@ -103,6 +105,13 @@ export default function OutfitSwipeDeck() {
       isFetchingRef.current = true;
       setLoading(true);
       setError(null);
+      setLoadingTimeout(false);
+      
+      // Clear any existing timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
 
       const apiCategories = CATEGORY_MAP[category];
       const apiCategory = apiCategories[subCategoryIndex];
@@ -191,6 +200,13 @@ export default function OutfitSwipeDeck() {
     } finally {
       setLoading(false);
       isFetchingRef.current = false;
+      setLoadingTimeout(false);
+      
+      // Clear timeout when loading completes
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
     }
   };
 
@@ -202,10 +218,26 @@ export default function OutfitSwipeDeck() {
     setHasMoreItems(true);
     setOutfitItems([]);
     setAllFetchedItems([]);
+    setLoadingTimeout(false);
     waitingForItemsRef.current = false;
     retryCountRef.current = 0;
+    
+    // Clear any existing timeout
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+    
     // Fetch all items for first subcategory
     fetchOutfitItems(selectedCategory, 0, false);
+    
+    // Cleanup timeout on unmount or category change
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    };
   }, [selectedCategory]);
 
   const panResponder = useRef(
@@ -370,23 +402,9 @@ export default function OutfitSwipeDeck() {
       }
     }
 
-    // No more cached items, try to fetch next subcategory
-    const apiCategories = CATEGORY_MAP[selectedCategory];
-    const hasMoreSubcategories = currentSubCategoryIndex + 1 < apiCategories.length;
-    
-    if (hasMoreSubcategories && hasMoreItems) {
-      // Automatically fetch next subcategory
-      const nextSubCategoryIndex = currentSubCategoryIndex + 1;
-      setCurrentSubCategoryIndex(nextSubCategoryIndex);
-      fetchOutfitItems(selectedCategory, nextSubCategoryIndex, false);
-      // Reset position and wait for new items
-      position.setValue({ x: 0, y: 0 });
-      setCurrentIndex(0);
-      return;
-    }
-
-    // No more items available in current subcategory
-    // Reset position and show empty state
+    // No more cached items - don't fetch next subcategory, just show finished message
+    // Show "Finished All Outfits" message with category tabs to switch
+    setHasMoreItems(false);
     position.setValue({ x: 0, y: 0 });
     setCurrentIndex(nextIndex);
   };
@@ -416,8 +434,8 @@ export default function OutfitSwipeDeck() {
     // State reset is handled in useEffect
   };
 
-  // Loading state
-  if (loading && outfitItems.length === 0) {
+  // Loading state - only show initial loading, not when waiting for more items after swipe
+  if (loading && outfitItems.length === 0 && currentIndex === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -464,52 +482,170 @@ export default function OutfitSwipeDeck() {
 
   // Guard: Don't render if currentItem is undefined
   if (!currentItem) {
-    // If loading, show loading state
+    // If loading after swiping through all items, check for timeout
     if (loading) {
+      // Show "data finished" if loading exceeded 5 seconds after swiping all items
+      if (loadingTimeout) {
+        return (
+          <SafeAreaView style={styles.container}>
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyTitle}>Data Finished</Text>
+              <Text style={styles.emptySubtitle}>
+                No more items available at this time.
+              </Text>
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={() => {
+                  setLoadingTimeout(false);
+                  setCurrentIndex(0);
+                  setLikedItems([]);
+                  setCurrentSubCategoryIndex(0);
+                  setAllFetchedItems([]);
+                  setOutfitItems([]);
+                  setHasMoreItems(true);
+                  if (loadingTimeoutRef.current) {
+                    clearTimeout(loadingTimeoutRef.current);
+                    loadingTimeoutRef.current = null;
+                  }
+                  fetchOutfitItems(selectedCategory, 0, false);
+                }}
+              >
+                <Text style={styles.resetButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        );
+      }
+      
+      // Show "you finished all outfits" message with category tabs to switch
       return (
         <SafeAreaView style={styles.container}>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#000000" />
-            <Text style={styles.loadingText}>Loading items...</Text>
+          <StatusBar barStyle="dark-content" />
+          
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>{personalColorType}</Text>
           </View>
-        </SafeAreaView>
-      );
-    }
 
-    // Check if we should show empty state or wait for more items
-    if (!hasMoreCachedItems && !hasMoreSubcategories && !hasMoreItems) {
-      return (
-        <SafeAreaView style={styles.container}>
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>No more items! 🎉</Text>
-            <Text style={styles.emptySubtitle}>
-              You have reviewed all {selectedCategory} items.
-            </Text>
+          {/* Category Tabs */}
+          <View style={styles.tabsContainer}>
             <TouchableOpacity
-              style={styles.resetButton}
-              onPress={() => {
-                setCurrentIndex(0);
-                setLikedItems([]);
-                setCurrentSubCategoryIndex(0);
-                setAllFetchedItems([]);
-                setOutfitItems([]);
-                setHasMoreItems(true);
-                fetchOutfitItems(selectedCategory, 0, false);
-              }}
+              style={[styles.tab, selectedCategory === "Top" && styles.tabActive]}
+              onPress={() => handleCategoryChange("Top")}
             >
-              <Text style={styles.resetButtonText}>Start Over</Text>
+              <Text
+                style={[
+                  styles.tabText,
+                  selectedCategory === "Top" && styles.tabTextActive,
+                ]}
+              >
+                Top
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                selectedCategory === "Bottom" && styles.tabActive,
+              ]}
+              onPress={() => handleCategoryChange("Bottom")}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  selectedCategory === "Bottom" && styles.tabTextActive,
+                ]}
+              >
+                Bottom
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, selectedCategory === "Shoes" && styles.tabActive]}
+              onPress={() => handleCategoryChange("Shoes")}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  selectedCategory === "Shoes" && styles.tabTextActive,
+                ]}
+              >
+                Shoes
+              </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Finished Message */}
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>You Finished All Outfits! 🎉</Text>
+            <Text style={styles.emptySubtitle}>
+              You have reviewed all {selectedCategory} items. Switch to another category to continue.
+            </Text>
+          </View>
         </SafeAreaView>
       );
     }
 
-    // If more items might be available, show loading
+    // Show "Finished All Outfits" message with category tabs to switch
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000000" />
-          <Text style={styles.loadingText}>Loading items...</Text>
+        <StatusBar barStyle="dark-content" />
+        
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>{personalColorType}</Text>
+        </View>
+
+        {/* Category Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, selectedCategory === "Top" && styles.tabActive]}
+            onPress={() => handleCategoryChange("Top")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                selectedCategory === "Top" && styles.tabTextActive,
+              ]}
+            >
+              Top
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              selectedCategory === "Bottom" && styles.tabActive,
+            ]}
+            onPress={() => handleCategoryChange("Bottom")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                selectedCategory === "Bottom" && styles.tabTextActive,
+              ]}
+            >
+              Bottom
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedCategory === "Shoes" && styles.tabActive]}
+            onPress={() => handleCategoryChange("Shoes")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                selectedCategory === "Shoes" && styles.tabTextActive,
+              ]}
+            >
+              Shoes
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Finished Message */}
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyTitle}>Finished All Outfits! 🎉</Text>
+          <Text style={styles.emptySubtitle}>
+            You have reviewed all {selectedCategory} items. Switch to another category to continue.
+          </Text>
         </View>
       </SafeAreaView>
     );

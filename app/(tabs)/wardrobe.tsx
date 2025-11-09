@@ -32,6 +32,7 @@ export default function WardrobeScreen() {
   const [selectedBottom, setSelectedBottom] = useState<LikedItem | null>(null);
   const [selectedShoes, setSelectedShoes] = useState<LikedItem | null>(null);
   const [sendingTryOn, setSendingTryOn] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
 
   // Helper function to determine category from item type
   const getCategoryFromType = (type: string): "Top" | "Bottom" | "Shoes" => {
@@ -338,23 +339,42 @@ export default function WardrobeScreen() {
 
     try {
       setSendingTryOn(true);
+      setGenerationProgress(0);
 
       // First, get user photo
       const userPhotoUri = await selectPhotoOption();
       if (!userPhotoUri) {
         setSendingTryOn(false);
+        setGenerationProgress(0);
         return; // User cancelled
       }
 
+      setGenerationProgress(10); // Photo selected
+
       // Convert all images to base64
       console.log("Converting images to base64...");
+      setGenerationProgress(20); // Starting conversion
+      
       const [userImage, upperImage, lowerImage, shoesImage] = await Promise.all([
-        convertUserPhotoToBase64(userPhotoUri),
-        convertImageToBase64(selectedTop.imageUrl),
-        convertImageToBase64(selectedBottom.imageUrl),
-        convertImageToBase64(selectedShoes.imageUrl),
+        convertUserPhotoToBase64(userPhotoUri).then((img) => {
+          setGenerationProgress(40); // User image converted
+          return img;
+        }),
+        convertImageToBase64(selectedTop.imageUrl).then((img) => {
+          setGenerationProgress(50); // Top image converted
+          return img;
+        }),
+        convertImageToBase64(selectedBottom.imageUrl).then((img) => {
+          setGenerationProgress(60); // Bottom image converted
+          return img;
+        }),
+        convertImageToBase64(selectedShoes.imageUrl).then((img) => {
+          setGenerationProgress(70); // Shoes image converted
+          return img;
+        }),
       ]);
 
+      setGenerationProgress(80); // All images converted, sending request
       console.log("Sending full outfit try-on request...");
       const response = await fetch(
         `${API_BASE_URL}/api/try-on/generate-full-outfit/on-sequential`,
@@ -372,6 +392,8 @@ export default function WardrobeScreen() {
           }),
         }
       );
+
+      setGenerationProgress(90); // Request sent, processing
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
@@ -415,6 +437,11 @@ export default function WardrobeScreen() {
         }
       }
 
+      setGenerationProgress(100); // Outfit ready!
+      
+      // Small delay to show 100% before navigation
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Navigate to result screen
       router.push({
         pathname: "/virtual-try-result",
@@ -429,6 +456,7 @@ export default function WardrobeScreen() {
       });
     } catch (error) {
       console.error("Error sending virtual try-on:", error);
+      setGenerationProgress(0);
       Alert.alert(
         "Error",
         error instanceof Error
@@ -566,20 +594,33 @@ export default function WardrobeScreen() {
             </View>
           )}
 
-          {/* Virtual Try-On Button */}
+          {/* Virtual Try-On Progress Bar */}
           {canTryOn && (
             <View style={styles.tryOnContainer}>
-              <TouchableOpacity
-                style={styles.tryOnButton}
-                onPress={handleVirtualTryOn}
-                disabled={sendingTryOn}
-              >
-                {sendingTryOn ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
+              {sendingTryOn ? (
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBarContainer}>
+                    <View 
+                      style={[
+                        styles.progressBarFill, 
+                        { width: `${generationProgress}%` }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {generationProgress === 100 
+                      ? "Outfit almost Ready! 🎉" 
+                      : `Generating Outfit... ${generationProgress}%`}
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.tryOnButton}
+                  onPress={handleVirtualTryOn}
+                >
                   <Text style={styles.tryOnButtonText}>Generate Outfit</Text>
-                )}
-              </TouchableOpacity>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </ScrollView>
@@ -738,5 +779,27 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 14,
     fontWeight: "600",
+  },
+  progressContainer: {
+    width: "100%",
+  },
+  progressBarContainer: {
+    width: "100%",
+    height: 8,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 4,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: "#000000",
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000000",
+    textAlign: "center",
   },
 });
