@@ -192,47 +192,78 @@ export default function ProfilePhotoScreen() {
               style={styles.backButton}
               disabled={uploading}
             >
-              <Text style={styles.backButtonText}>←</Text>
+              <View style={styles.backButtonInner}>
+                <Text style={styles.backButtonText}>←</Text>
+              </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleSkip} disabled={uploading}>
-              <Text style={styles.skipText}>✕</Text>
+            <TouchableOpacity 
+              onPress={handleSkip} 
+              disabled={uploading}
+              style={styles.skipButtonHeader}
+            >
+              <Text style={styles.skipText}>Skip</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Title */}
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Position your face inside the guide</Text>
+          {/* Title Section */}
+          <View style={styles.titleSection}>
+            <Text style={styles.title}>Capture Your Profile</Text>
+            <Text style={styles.subtitle}>Position your face in the frame</Text>
           </View>
 
           {/* Face Guide Overlay */}
           <View style={styles.cameraContainer}>
-            <View style={styles.faceOutline}>
-              <View style={styles.faceOvalContainer}>
+            {/* Corner guides */}
+            <View style={styles.guideContainer}>
+              <View style={styles.faceGuideFrame}>
+                {/* Top corners */}
+                <View style={[styles.corner, styles.topLeft]} />
+                <View style={[styles.corner, styles.topRight]} />
+                
                 {/* Face oval guide */}
-                <View style={styles.faceOval} />
-
-                {/* Lighting indicator */}
-                <View style={styles.lightingIndicator}>
-                  <View
-                    style={[
-                      styles.lightingDot,
-                      lightingGood && styles.lightingDotGood,
-                    ]}
-                  />
-                  <Text style={styles.lightingText}>Good Lighting</Text>
+                <View style={styles.faceOvalContainer}>
+                  <View style={styles.faceOval} />
+                  <View style={styles.faceOvalInner} />
                 </View>
+                
+                {/* Bottom corners */}
+                <View style={[styles.corner, styles.bottomLeft]} />
+                <View style={[styles.corner, styles.bottomRight]} />
               </View>
             </View>
 
-            {/* Capture Button */}
+            {/* Lighting indicator */}
+            <View style={styles.lightingIndicator}>
+              <View
+                style={[
+                  styles.lightingDot,
+                  lightingGood && styles.lightingDotGood,
+                ]}
+              />
+              <Text style={styles.lightingText}>
+                {lightingGood ? "Good Lighting" : "Adjust Lighting"}
+              </Text>
+            </View>
+
+            {/* Uploading Indicator */}
+            {uploading && (
+              <View style={styles.uploadingContainer}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.uploadingText}>Analyzing your colors...</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Capture Button - Between camera and tips */}
+          <View style={styles.captureButtonContainer}>
             <TouchableOpacity
               style={styles.captureButton}
               onPress={handleCapture}
-              activeOpacity={0.8}
+              activeOpacity={0.7}
               disabled={!cameraReady || uploading}
             >
               {uploading ? (
-                <ActivityIndicator size="large" color="#FF6B35" />
+                <ActivityIndicator size="large" color="#FFFFFF" />
               ) : (
                 <View
                   style={[
@@ -242,23 +273,37 @@ export default function ProfilePhotoScreen() {
                 />
               )}
             </TouchableOpacity>
-
-            {/* Uploading Indicator */}
-            {uploading && (
-              <View style={styles.uploadingContainer}>
-                <ActivityIndicator size="small" color="#fff" style={{ marginRight: 10 }} />
-                <Text style={styles.uploadingText}>Analyzing your colors...</Text>
-              </View>
+            {!uploading && (
+              <Text style={styles.captureHint}>
+                {cameraReady ? "Tap to capture" : "Preparing camera..."}
+              </Text>
             )}
           </View>
 
           {/* Instructions */}
           <View style={styles.instructionsContainer}>
-            <Text style={styles.instructionsTitle}>Tips for best results:</Text>
-            <Text style={styles.instructionText}>• Face the camera directly</Text>
-            <Text style={styles.instructionText}>• Ensure good lighting</Text>
-            <Text style={styles.instructionText}>• Remove glasses if possible</Text>
-            <Text style={styles.instructionText}>• Keep a neutral expression</Text>
+            <View style={styles.instructionsHeader}>
+              <Text style={styles.instructionsIcon}>💡</Text>
+              <Text style={styles.instructionsTitle}>Tips for best results</Text>
+            </View>
+            <View style={styles.instructionsList}>
+              <View style={styles.instructionItem}>
+                <View style={styles.instructionBullet} />
+                <Text style={styles.instructionText}>Face the camera directly</Text>
+              </View>
+              <View style={styles.instructionItem}>
+                <View style={styles.instructionBullet} />
+                <Text style={styles.instructionText}>Ensure good lighting</Text>
+              </View>
+              <View style={styles.instructionItem}>
+                <View style={styles.instructionBullet} />
+                <Text style={styles.instructionText}>Remove glasses if possible</Text>
+              </View>
+              <View style={styles.instructionItem}>
+                <View style={styles.instructionBullet} />
+                <Text style={styles.instructionText}>Keep a neutral expression</Text>
+              </View>
+            </View>
           </View>
         </View>
       </CameraView>
@@ -269,7 +314,7 @@ export default function ProfilePhotoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#000000",
   },
   overlay: {
     flex: 1,
@@ -281,179 +326,316 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    paddingBottom: 10,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(42, 42, 42, 0.8)",
+    width: 44,
+    height: 44,
     justifyContent: "center",
     alignItems: "center",
   },
+  backButtonInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
   backButtonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: "600",
+  },
+  skipButtonHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   skipText: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
-  titleContainer: {
+  titleSection: {
     paddingHorizontal: 30,
-    marginBottom: 30,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    paddingVertical: 15,
+    paddingTop: 20,
+    paddingBottom: 30,
+    alignItems: "center",
   },
   title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#FFFFFF",
     textAlign: "center",
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.7)",
+    textAlign: "center",
+    fontWeight: "400",
   },
   cameraContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
+    paddingVertical: 20,
   },
-  faceOutline: {
-    width: width * 0.7,
+  guideContainer: {
+    width: width * 0.75,
     height: height * 0.5,
     justifyContent: "center",
     alignItems: "center",
   },
-  faceOvalContainer: {
-    position: "relative",
+  faceGuideFrame: {
     width: "100%",
     height: "100%",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  corner: {
+    position: "absolute",
+    width: 30,
+    height: 30,
+    borderColor: "#FFFFFF",
+  },
+  topLeft: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderTopLeftRadius: 8,
+  },
+  topRight: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderTopRightRadius: 8,
+  },
+  bottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderBottomLeftRadius: 8,
+  },
+  bottomRight: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderBottomRightRadius: 8,
+  },
+  faceOvalContainer: {
+    position: "absolute",
+    width: 260,
+    height: 360,
     justifyContent: "center",
     alignItems: "center",
   },
   faceOval: {
-    width: 250,
-    height: 350,
-    borderRadius: 125,
-    borderWidth: 3,
-    borderColor: "#fff",
+    width: 260,
+    height: 360,
+    borderRadius: 130,
+    borderWidth: 2.5,
+    borderColor: "#FFFFFF",
+    backgroundColor: "transparent",
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  faceOvalInner: {
+    position: "absolute",
+    width: 240,
+    height: 340,
+    borderRadius: 120,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
     backgroundColor: "transparent",
   },
   lightingIndicator: {
     position: "absolute",
-    bottom: 40,
+    top: 20,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   lightingDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#666",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#FF4444",
   },
   lightingDotGood: {
     backgroundColor: "#4CAF50",
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 3,
   },
   lightingText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "500",
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  },
+  captureButtonContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    paddingHorizontal: 20,
   },
   captureButton: {
-    position: "absolute",
-    bottom: 40,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#fff",
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 4,
-    borderColor: "#FF6B35",
+    borderWidth: 5,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   captureButtonInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#FF6B35",
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: "#000000",
   },
   captureButtonDisabled: {
-    backgroundColor: "#999",
+    backgroundColor: "#666666",
+  },
+  captureHint: {
+    marginTop: 12,
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 13,
+    fontWeight: "500",
+    letterSpacing: 0.2,
   },
   uploadingContainer: {
     position: "absolute",
-    bottom: 130,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    bottom: 160,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 30,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   uploadingText: {
-    color: "#fff",
-    fontSize: 16,
+    color: "#FFFFFF",
+    fontSize: 15,
     fontWeight: "600",
+    letterSpacing: 0.3,
   },
   instructionsContainer: {
     paddingHorizontal: 30,
-    paddingTop: 20,
-    paddingBottom: 40,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingTop: 24,
+    paddingBottom: 50,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
+  },
+  instructionsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 8,
+  },
+  instructionsIcon: {
+    fontSize: 18,
   },
   instructionsTitle: {
-    fontSize: 14,
-    color: "#fff",
-    fontWeight: "bold",
-    marginBottom: 12,
+    fontSize: 16,
+    color: "#FFFFFF",
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  instructionsList: {
+    gap: 12,
+  },
+  instructionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  instructionBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
   },
   instructionText: {
-    fontSize: 13,
-    color: "#fff",
-    marginBottom: 6,
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.85)",
     lineHeight: 20,
+    flex: 1,
   },
   loadingText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
     textAlign: "center",
     marginTop: 100,
+    fontWeight: "500",
   },
   errorText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "700",
     textAlign: "center",
     marginTop: 100,
-    marginBottom: 10,
+    marginBottom: 12,
     paddingHorizontal: 30,
   },
   errorSubtext: {
-    color: "#999",
-    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 15,
     textAlign: "center",
     marginBottom: 30,
     paddingHorizontal: 40,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   skipButton: {
-    backgroundColor: "#FF6B35",
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 25,
+    backgroundColor: "#000000",
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 28,
     alignSelf: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   skipButtonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
 });

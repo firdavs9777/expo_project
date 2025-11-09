@@ -43,6 +43,8 @@ npm install
 
 ```bash
 npm start
+or 
+npm run start:tunnel
 ```
 
 or

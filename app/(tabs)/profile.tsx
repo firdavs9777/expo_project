@@ -16,8 +16,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_BASE_URL = "https://stylist-ai-be.onrender.com";
+const PROFILE_IMAGE_KEY = "profile_image";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -27,6 +29,11 @@ export default function ProfileScreen() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [colorAnalysis, setColorAnalysis] = useState<any>(null);
 
+  // Load profile image from local storage on mount
+  useEffect(() => {
+    loadProfileImageFromStorage();
+  }, []);
+
   // Fetch user profile and color analysis on mount
   useEffect(() => {
     if (isLoggedIn && user?.access_token) {
@@ -34,6 +41,29 @@ export default function ProfileScreen() {
       fetchColorAnalysis();
     }
   }, [isLoggedIn, user]);
+
+  // Load profile image from AsyncStorage
+  const loadProfileImageFromStorage = async () => {
+    try {
+      const storedImage = await AsyncStorage.getItem(PROFILE_IMAGE_KEY);
+      if (storedImage) {
+        setProfileImage(storedImage);
+        console.log("Profile image loaded from local storage");
+      }
+    } catch (error) {
+      console.error("Error loading profile image from storage:", error);
+    }
+  };
+
+  // Save profile image to AsyncStorage
+  const saveProfileImageToStorage = async (imageUri: string) => {
+    try {
+      await AsyncStorage.setItem(PROFILE_IMAGE_KEY, imageUri);
+      console.log("Profile image saved to local storage");
+    } catch (error) {
+      console.error("Error saving profile image to storage:", error);
+    }
+  };
 
   // Refetch profile when screen comes into focus (e.g., after saving analysis)
   useFocusEffect(
@@ -124,6 +154,8 @@ export default function ProfileScreen() {
             : `data:image/jpeg;base64,${data.face_image}`;
 
           setProfileImage(imageUri);
+          // Save to local storage
+          await saveProfileImageToStorage(imageUri);
           console.log("Profile image set successfully");
         } else {
           console.log("No face image in profile");
@@ -362,6 +394,8 @@ export default function ProfileScreen() {
       // Update local state
       setUserProfile(data);
       setProfileImage(faceImageDataUri);
+      // Save to local storage
+      await saveProfileImageToStorage(faceImageDataUri);
 
       Alert.alert("Success", "Profile picture updated successfully!");
     } catch (error) {
@@ -383,7 +417,7 @@ export default function ProfileScreen() {
       ? {
           name: user.email.split("@")[0] || "User",
           email: user.email,
-          avatar: profileImage || `https://i.pravatar.cc/300?u=${user.user_id}`,
+          avatar: profileImage || null, // Only show stored profile picture, no random fallback
           colorSeason: colorAnalysis?.personal_color_type || "Not analyzed",
           undertone: colorAnalysis?.undertone 
             ? colorAnalysis.undertone.charAt(0).toUpperCase() + colorAnalysis.undertone.slice(1)
@@ -401,7 +435,7 @@ export default function ProfileScreen() {
       : {
           name: "Guest User",
           email: "guest@example.com",
-          avatar: "https://i.pravatar.cc/300?img=0",
+          avatar: null, // No avatar for guest users
           colorSeason: "Not analyzed",
           undertone: "Unknown",
           contrast: "Unknown",
@@ -424,6 +458,13 @@ export default function ProfileScreen() {
           await logout();
           setProfileImage(null);
           setUserProfile(null);
+          // Clear profile image from local storage on logout
+          try {
+            await AsyncStorage.removeItem(PROFILE_IMAGE_KEY);
+            console.log("Profile image cleared from local storage");
+          } catch (error) {
+            console.error("Error clearing profile image from storage:", error);
+          }
           // Navigate to login screen after logout
           router.replace("/login");
         },
@@ -453,7 +494,14 @@ export default function ProfileScreen() {
           <View style={styles.avatarSection}>
             <Text style={styles.avatarLabel}>Avatar</Text>
             <View style={styles.avatarContainer}>
-              <Image source={{ uri: displayData.avatar }} style={styles.avatar} />
+              {displayData.avatar ? (
+                <Image source={{ uri: displayData.avatar }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Ionicons name="person" size={80} color="#cccccc" />
+                  <Text style={styles.avatarPlaceholderText}>No photo</Text>
+                </View>
+              )}
               <TouchableOpacity
                 style={styles.reuploadButton}
                 onPress={handleImageUpload}
@@ -464,7 +512,9 @@ export default function ProfileScreen() {
                 ) : (
                   <>
                     <Ionicons name="pencil" size={16} color="#000000" />
-                    <Text style={styles.reuploadText}>Re-upload Picture</Text>
+                    <Text style={styles.reuploadText}>
+                      {displayData.avatar ? "Re-upload Picture" : "Upload Picture"}
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -606,6 +656,23 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 12,
     backgroundColor: "#f5f5f5",
+  },
+  avatarPlaceholder: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: "#f5f5f5",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#e0e0e0",
+    borderStyle: "dashed",
+  },
+  avatarPlaceholderText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#999999",
+    fontWeight: "500",
   },
   reuploadButton: {
     position: "absolute",

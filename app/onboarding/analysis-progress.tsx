@@ -1,11 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Dimensions,
   Image,
   StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -21,6 +23,9 @@ export default function AnalysisProgressScreen() {
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
   const [uploadResult, setUploadResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isNoFaceDetected, setIsNoFaceDetected] = useState(false);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const analysisSteps = [
     "Analyzing your color palette",
@@ -67,9 +72,22 @@ export default function AnalysisProgressScreen() {
 
             if (!apiResponse.ok) {
               const errorText = await apiResponse.text();
-              throw new Error(
-                `Upload failed: ${apiResponse.status} - ${errorText}`
-              );
+              let errorMessage = `Upload failed: ${apiResponse.status} - ${errorText}`;
+              
+              // Check if it's a "no face detected" error
+              try {
+                const errorJson = JSON.parse(errorText);
+                if (errorJson.detail && errorJson.detail.includes("No face detected take closer photo")) {
+                  errorMessage = "NO_FACE_DETECTED";
+                }
+              } catch (e) {
+                // If errorText is not JSON, check if it contains the message
+                if (errorText.includes("No face detected")) {
+                  errorMessage = "NO_FACE_DETECTED";
+                }
+              }
+              
+              throw new Error(errorMessage);
             }
 
             const result = await apiResponse.json();
@@ -97,22 +115,39 @@ export default function AnalysisProgressScreen() {
         setUploadResult(result);
         // Set progress to 100 when upload completes
         setProgress(100);
+        setError(null);
+        setIsNoFaceDetected(false);
       })
       .catch((error) => {
         console.error("Upload error:", error);
-        // On error, still navigate but without results
-        setTimeout(() => {
-          router.replace({
-            pathname: "/analysis-results",
-            params: {
-              photoUri: photoUri,
-            },
-          });
-        }, 1000);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // Check if it's a "no face detected" error
+        if (errorMessage === "NO_FACE_DETECTED" || errorMessage.includes("No face detected")) {
+          // Clear progress interval
+          if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+            progressIntervalRef.current = null;
+          }
+          setIsNoFaceDetected(true);
+          setError("No face detected in the image. Please retake the photo with your face clearly visible.");
+          setProgress(0);
+        } else {
+          // For other errors, navigate to results without data
+          setError(errorMessage);
+          setTimeout(() => {
+            router.replace({
+              pathname: "/analysis-results",
+              params: {
+                photoUri: photoUri,
+              },
+            });
+          }, 2000);
+        }
       });
 
     // Simulate progress while uploading
-    const interval = setInterval(() => {
+    progressIntervalRef.current = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 95) {
           // Don't go to 100 until upload completes
@@ -122,7 +157,12 @@ export default function AnalysisProgressScreen() {
       });
     }, 200);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    };
   }, [photoUri]);
 
   // Update current step based on progress
@@ -146,6 +186,10 @@ export default function AnalysisProgressScreen() {
     }
   }, [progress, uploadResult, photoUri]);
 
+  const handleRetake = () => {
+    router.replace("/onboarding/camera-profile");
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -155,25 +199,42 @@ export default function AnalysisProgressScreen() {
         <Image source={{ uri: photoUri }} style={styles.photo} />
       )}
 
-      {/* Progress Section */}
-      <View style={styles.progressContainer}>
-        <Text style={styles.progressText}>Analyzing {Math.round(progress)}%...</Text>
-
-        {/* Progress Bar */}
-        <View style={styles.progressBarContainer}>
-          <View style={[styles.progressBar, { width: `${progress}%` }]} />
-        </View>
-
-        {/* Current Step Text */}
-        <Text style={styles.stepText}>
-          {analysisSteps[currentStep] || analysisSteps[0]}
-        </Text>
-        {currentStep < analysisSteps.length - 1 && (
-          <Text style={styles.nextStepText}>
-            {analysisSteps[currentStep + 1]}
+      {/* Error State - No Face Detected */}
+      {isNoFaceDetected ? (
+        <View style={styles.progressContainer}>
+          <Text style={styles.errorTitle}>No Face Detected</Text>
+          <Text style={styles.errorText}>
+            {error || "Please ensure your face is clearly visible in the photo."}
           </Text>
-        )}
-      </View>
+          <TouchableOpacity
+            style={styles.retakeButton}
+            onPress={handleRetake}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.retakeButtonText}>Retake Photo</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        /* Progress Section */
+        <View style={styles.progressContainer}>
+          <Text style={styles.progressText}>Analyzing {Math.round(progress)}%...</Text>
+
+          {/* Progress Bar */}
+          <View style={styles.progressBarContainer}>
+            <View style={[styles.progressBar, { width: `${progress}%` }]} />
+          </View>
+
+          {/* Current Step Text */}
+          <Text style={styles.stepText}>
+            {analysisSteps[currentStep] || analysisSteps[0]}
+          </Text>
+          {currentStep < analysisSteps.length - 1 && (
+            <Text style={styles.nextStepText}>
+              {analysisSteps[currentStep + 1]}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -230,5 +291,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#999999",
     textAlign: "center",
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#000000",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  errorText: {
+    fontSize: 15,
+    color: "#666666",
+    marginBottom: 24,
+    textAlign: "center",
+    lineHeight: 22,
+    paddingHorizontal: 20,
+  },
+  retakeButton: {
+    backgroundColor: "#000000",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  retakeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
 });

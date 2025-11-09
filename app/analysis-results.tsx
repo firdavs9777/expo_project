@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 
 const { width } = Dimensions.get("window");
 
@@ -21,8 +22,11 @@ const API_BASE_URL = "https://stylist-ai-be.onrender.com";
 export default function AnalysisResultsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, logout } = useAuth();
   const [saving, setSaving] = useState(false);
+
+  // Get photoUri from params (passed from analysis-progress)
+  const photoUri = params.photoUri as string | undefined;
 
   // Parse the upload data from camera screen
   let analysisData;
@@ -151,11 +155,117 @@ export default function AnalysisResultsScreen() {
     }
   };
 
+  // Convert photo to base64 for profile update
+  const convertPhotoToBase64 = async (uri: string): Promise<string> => {
+    try {
+      const imageBase64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: "base64" as any,
+      });
+
+      if (!imageBase64 || typeof imageBase64 !== "string" || imageBase64.length === 0) {
+        throw new Error("Image base64 conversion returned empty or invalid result");
+      }
+
+      // Determine image format from URI
+      const imageFormat = uri.toLowerCase().includes(".png") ? "png" : "jpeg";
+      return `data:image/${imageFormat};base64,${imageBase64}`;
+    } catch (error) {
+      console.error("Error converting photo to base64:", error);
+      throw new Error(
+        `Failed to convert photo: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
+    }
+  };
+
+  // Update user profile with face image
+  const updateProfileWithPhoto = async (faceImageDataUri: string) => {
+    try {
+      // First, get current profile to preserve other data
+      const getProfileResponse = await fetch(
+        `${API_BASE_URL}/api/user/profile`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${user?.access_token}`,
+          },
+        }
+      );
+
+      let existingProfileData: any = {};
+      if (getProfileResponse.ok) {
+        existingProfileData = await getProfileResponse.json();
+      }
+
+      // Update profile with face image
+      const profileData = {
+        height: existingProfileData?.height || null,
+        weight: existingProfileData?.weight || null,
+        chest_size: existingProfileData?.chest_size || null,
+        waist_size: existingProfileData?.waist_size || null,
+        hip_size: existingProfileData?.hip_size || null,
+        shoe_size: existingProfileData?.shoe_size || null,
+        clothing_size: existingProfileData?.clothing_size || null,
+        age: existingProfileData?.age || null,
+        gender: existingProfileData?.gender || null,
+        preferred_style: existingProfileData?.preferred_style || null,
+        body_image: existingProfileData?.body_image || null,
+        face_image: faceImageDataUri, // Update with new photo from color analysis
+      };
+
+      const updateResponse = await fetch(
+        `${API_BASE_URL}/api/user/profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${user?.access_token}`,
+          },
+          body: JSON.stringify(profileData),
+        }
+      );
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text();
+        console.error("Failed to update profile with photo:", errorText);
+        // Don't throw - this is optional, color analysis is more important
+        return;
+      }
+
+      console.log("Profile updated with photo successfully");
+    } catch (error) {
+      console.error("Error updating profile with photo:", error);
+      // Don't throw - this is optional
+    }
+  };
+
   const handleSaveResults = async () => {
     // Check if user is logged in
     if (!isLoggedIn || !user) {
       // Navigate to login page if not logged in
-      router.push("/login");
+      Alert.alert(
+        "Authentication Required",
+        "Please sign in to save your results.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign In", onPress: () => router.replace("/login") },
+        ]
+      );
+      return;
+    }
+
+    // Validate access token exists
+    if (!user.access_token) {
+      console.error("Access token is missing");
+      // Clear session and redirect to login
+      await logout();
+      Alert.alert(
+        "Authentication Error",
+        "Your session has expired. Please sign in again.",
+        [
+          { text: "OK", onPress: () => router.replace("/login") },
+        ]
+      );
       return;
     }
 
@@ -173,6 +283,9 @@ export default function AnalysisResultsScreen() {
       };
 
       console.log("Saving color analysis data:", JSON.stringify(colorAnalysisData, null, 2));
+      console.log("User ID:", user.user_id);
+      console.log("Token exists:", !!user.access_token);
+      console.log("Token length:", user.access_token?.length || 0);
 
       // Save color analysis results using the dedicated endpoint
       const response = await fetch(
@@ -192,6 +305,32 @@ export default function AnalysisResultsScreen() {
         const errorText = await response.text();
         console.error("Failed to save color analysis:", errorText);
         console.error("Response status:", response.status);
+        
+        // Handle 401 Unauthorized - token expired or invalid
+        if (response.status === 401) {
+          console.log("401 Unauthorized detected - clearing session and redirecting to login");
+          // Clear the session and redirect to login
+          try {
+            await logout();
+          } catch (logoutError) {
+            console.error("Error during logout:", logoutError);
+          }
+          Alert.alert(
+            "Session Expired",
+            "Your session has expired. Please sign in again to save your results.",
+            [
+              { 
+                text: "OK", 
+                onPress: () => {
+                  router.replace("/login");
+                }
+              },
+            ]
+          );
+          return;
+        }
+        
+        // Handle other errors
         Alert.alert(
           "Error",
           "Failed to save results. Please try again.",
@@ -203,6 +342,19 @@ export default function AnalysisResultsScreen() {
       const savedData = await response.json();
       console.log("Color analysis saved successfully:", savedData);
       console.log("Saved color analysis keys:", Object.keys(savedData));
+
+      // If photoUri exists, also update the profile picture
+      if (photoUri) {
+        try {
+          console.log("Updating profile with photo from color analysis...");
+          const faceImageDataUri = await convertPhotoToBase64(photoUri);
+          await updateProfileWithPhoto(faceImageDataUri);
+          console.log("Profile picture updated successfully");
+        } catch (photoError) {
+          console.error("Error updating profile picture:", photoError);
+          // Don't fail the whole operation if photo update fails
+        }
+      }
 
       // Success - navigate to profile
       Alert.alert("Success", "Your color analysis has been saved!", [
